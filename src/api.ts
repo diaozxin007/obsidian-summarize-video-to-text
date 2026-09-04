@@ -152,6 +152,36 @@ export class SvtApi {
   }
 
   /**
+   * 笔记 Markdown 由主站生成(只读缓存,不计费;分析没缓存回 404)。
+   * summary 是调用方自己从 /api/summarize 拿到的文本,主站只负责排进去。
+   */
+  async exportNote(input: {
+    videoId: string;
+    outputLang: string;
+    include: { transcript: boolean; quiz: boolean; qa: boolean };
+    embedPlayer: boolean;
+    summary?: { template: string; text: string };
+  }): Promise<{ markdown: string; fileName: string; title: string }> {
+    const r = await this.request<{ markdown?: string; fileName?: string; title?: string }>(
+      "/api/export/obsidian",
+      {
+        body: {
+          videoId: input.videoId,
+          lang: this.opts.uiLang,
+          outputLang: input.outputLang,
+          include: input.include,
+          embedPlayer: input.embedPlayer,
+          summary: input.summary,
+          siteUrl: this.opts.baseUrl.replace(/\/+$/, ""),
+        },
+      },
+    );
+    const j = r.json();
+    if (!j.markdown) throw new ApiError(r.status, "bad_response", "Unexpected export response", r.requestId);
+    return { markdown: j.markdown, fileName: j.fileName || input.videoId, title: j.title || input.videoId };
+  }
+
+  /**
    * 连接是否有效:/api/quota 走 Bearer。主站对无效令牌不回 401,而是当匿名
    * 处理(plan 为 "anon"),所以带着令牌却拿到 anon 也算令牌失效。
    */

@@ -5,25 +5,30 @@
  *   1. 账号连接:设置页按钮跳主站 /connect/obsidian,主站签发个人令牌后通过
  *      obsidian://svt-connect 回来(registerObsidianProtocolHandler),核对 state 存 token。
  *   2. 命令「Summarize video from URL」:弹窗要链接 → 调主站 analyze(+ 可选
- *      transcript / summarize / quiz)→ note.ts 拼笔记 → 写进设定目录并打开。
+ *      summarize / quiz,这两步计费)→ /api/export/obsidian 生成 Markdown(只读缓存)
+ *      → 写进设定目录并打开。笔记格式只在主站一处定义,网站的导出按钮同一份。
  *   3. 编辑器命令:选中一个链接直接跑,不弹窗;右键菜单对光标下/选中的链接、
  *      以及阅读视图里的外链也有「Summarize video」。
  *   4. 嵌入播放器:渲染 ```svt-video 块,拦截时间戳链接的点击原地跳秒(player.ts)。
+ *   5. 网站 → Obsidian:主站导出按钮打开 obsidian://svt-import?videoId=…,插件直接
+ *      拉 export(分析已在网站做过,不再计费)。
+ *   6. 「Refresh video note」:重新拉 export,只替换标记之间的生成区和我们的
+ *      frontmatter 键,用户写在标记外的内容保留(file.ts mergeNote)。
  *
  * 所有 AI 计算都在主站做,插件不存密钥、不调模型;配额和积分也由主站按账号扣。
  */
 
-import { moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu } from "obsidian";
+import { MarkdownView, moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu } from "obsidian";
 import { ApiError, SvtApi } from "./api";
 import { BUILD_CHANNEL, VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, urlAtColumn, UrlModal, type RunOptions } from "./modal";
-import { buildNote, safeFileName } from "./note";
+import { mergeNote, safeFileName, summaryOf, videoIdOf } from "./file";
 import { editorClickExtension, handleDocumentClick, renderVideoBlock } from "./player";
-import { VIDEO_BLOCK_LANG } from "./video";
+import { platformOf, VIDEO_BLOCK_LANG } from "./video";
 import { DEFAULT_SETTINGS, SvtSettingTab, type SvtSettings } from "./settings";
-import type { QuizQuestion, TranscriptResult } from "./types";
 
 const PROTOCOL_ACTION = "svt-connect";
+const IMPORT_ACTION = "svt-import";
 
 export default class SvtPlugin extends Plugin {
   settings: SvtSettings = { ...DEFAULT_SETTINGS };
@@ -40,6 +45,9 @@ export default class SvtPlugin extends Plugin {
     this.registerObsidianProtocolHandler(PROTOCOL_ACTION, (params) => {
       void this.handleConnectCallback(params.token ?? "", params.state ?? "");
     });
+    this.registerObsidianProtocolHandler(IMPORT_ACTION, (params) => {
+      void this.importFromSite(params.videoId ?? "", params.outputLang ?? "");
+    });
 
     this.addCommand({
       id: "summarize-video-url",
@@ -54,6 +62,19 @@ export default class SvtPlugin extends Plugin {
         const url = extractUrl(editor.getSelection());
         if (!url) return false;
         if (!checking) void this.run(url);
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "refresh-video-note",
+      name: "Refresh video note",
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== "md") return false;
+        const cache = this.app.metadataCache.getFileCache(file);
+        if (!cache?.frontmatter?.video_id) return false;
+        if (!checking) void this.refresh(file);
         return true;
       },
     });
@@ -185,49 +206,30 @@ export default class SvtPlugin extends Plugin {
   /** opts 缺省时按设置来(命令「link in selection」不弹窗,走这条) */
   async run(url: string, opts?: RunOptions): Promise<void> {
     const o = opts ?? this.defaultRunOptions();
-    if (this.running) {
-      new Notice("Summarize Video: already working on a video, please wait.");
-      return;
-    }
-    if (!this.settings.token) {
-      new Notice("Summarize Video: connect your account in the plugin settings first.");
-      return;
-    }
+    if (!this.guard()) return;
     this.running = true;
     const notice = new Notice("Summarize Video: analyzing…", 0);
     try {
       const api = this.api();
       const outputLang = this.outputLang(o.outputLang);
-
       const analysis = await api.analyze(url, outputLang);
       const videoId = analysis.videoId;
 
-      // 剩下几步互不依赖,并行拿;单项失败不拖累整篇笔记
-      notice.setMessage("Summarize Video: fetching details…");
-      const [meta, transcript, summary, quiz] = await Promise.all([
-        api.meta(videoId),
-        this.settings.includeTranscript ? soft(() => api.transcript(url)) : null,
+      // 摘要 / 测验是计费步骤,按需并行跑;单项失败不拖累整篇笔记
+      notice.setMessage("Summarize Video: preparing note…");
+      const [summary] = await Promise.all([
         o.summaryTemplate ? soft(() => api.summarize(url, outputLang, o.summaryTemplate)) : null,
         this.settings.includeQuiz ? soft(() => api.quiz(videoId, outputLang, undefined)) : null,
       ]);
 
-      const content = buildNote({
-        url,
-        siteUrl: this.settings.baseUrl,
+      const note = await api.exportNote({
         videoId,
-        analysis,
-        title: meta?.title,
-        channel: meta?.channel,
-        thumbnail: meta?.thumbnail,
+        outputLang,
+        include: this.include(),
         embedPlayer: this.settings.embedPlayer,
-        lang: outputLang,
         summary: summary ? { template: o.summaryTemplate, text: summary } : undefined,
-        quiz: (quiz as QuizQuestion[] | null) ?? undefined,
-        transcript: (transcript as TranscriptResult | null) ?? undefined,
-        createdAt: new Date(),
       });
-
-      const file = await this.writeNote(safeFileName(meta?.title || videoId), content);
+      const file = await this.writeNote(safeFileName(note.fileName), note.markdown);
       notice.hide();
       new Notice(`Summarize Video: created ${file.path}`);
       if (this.settings.openAfterCreate) await this.app.workspace.getLeaf(false).openFile(file);
@@ -237,6 +239,96 @@ export default class SvtPlugin extends Plugin {
     } finally {
       this.running = false;
     }
+  }
+
+  /** 网站导出按钮 → obsidian://svt-import?videoId=…&outputLang=…:分析已在网站做过 */
+  private async importFromSite(videoId: string, outputLang: string): Promise<void> {
+    if (!/^([\w-]{11}|tt-\d+|ig-[\w-]+|up-[\w-]+)$/.test(videoId)) {
+      new Notice("Summarize Video: ignored an import link with a bad video id.");
+      return;
+    }
+    if (!this.guard()) return;
+    this.running = true;
+    const notice = new Notice("Summarize Video: importing from the website…", 0);
+    try {
+      const note = await this.api().exportNote({
+        videoId,
+        outputLang: outputLang || this.outputLang(),
+        include: this.include(),
+        embedPlayer: this.settings.embedPlayer,
+      });
+      const file = await this.writeNote(safeFileName(note.fileName), note.markdown);
+      notice.hide();
+      new Notice(`Summarize Video: created ${file.path}`);
+      await this.app.workspace.getLeaf(false).openFile(file);
+    } catch (e) {
+      notice.hide();
+      // 分析缓存过期了就走完整流程(会计费),用规范链接重新分析
+      if (e instanceof ApiError && e.status === 404) {
+        this.running = false;
+        await this.run(canonicalUrl(videoId, this.settings.baseUrl), { outputLang, summaryTemplate: "" });
+        return;
+      }
+      this.reportError(e);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  /** 刷新当前笔记:只换生成区和我们的 frontmatter 键 */
+  private async refresh(file: TFile): Promise<void> {
+    if (!this.guard()) return;
+    this.running = true;
+    const notice = new Notice("Summarize Video: refreshing note…", 0);
+    try {
+      const existing = await this.app.vault.read(file);
+      const videoId = videoIdOf(existing);
+      if (!videoId) throw new Error("This note has no video_id in its frontmatter.");
+      const cache = this.app.metadataCache.getFileCache(file);
+      const lang = typeof cache?.frontmatter?.lang === "string" ? cache.frontmatter.lang : this.outputLang();
+      const summaryText = summaryOf(existing);
+      const note = await this.api().exportNote({
+        videoId,
+        outputLang: lang,
+        include: this.include(),
+        embedPlayer: this.settings.embedPlayer,
+        summary: summaryText ? { template: "", text: summaryText } : undefined,
+      });
+      const merged = mergeNote(existing, note.markdown);
+      if (!merged) throw new Error("Could not find the %% svt:start %% / %% svt:end %% markers in this note.");
+      await this.app.vault.modify(file, merged);
+      notice.hide();
+      new Notice("Summarize Video: note refreshed.");
+      // 编辑器里打开着的话让它重读
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (view?.file?.path === file.path && view.getMode() === "preview") view.previewMode.rerender(true);
+    } catch (e) {
+      notice.hide();
+      this.reportError(e);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private include(): { transcript: boolean; quiz: boolean; qa: boolean } {
+    return {
+      transcript: this.settings.includeTranscript,
+      quiz: this.settings.includeQuiz,
+      qa: this.settings.includeQa,
+    };
+  }
+
+  /** 防重入 + 未连接提示;能跑返回 true */
+  private guard(): boolean {
+    if (this.running) {
+      new Notice("Summarize Video: already working on a video, please wait.");
+      return false;
+    }
+    if (!this.settings.token) {
+      new Notice("Summarize Video: connect your account in the plugin settings first.");
+      return false;
+    }
+    return true;
   }
 
   private async writeNote(baseName: string, content: string): Promise<TFile> {
@@ -284,4 +376,18 @@ function randomState(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** 复合 id → 能喂给 /api/analyze 的规范链接(与主站 lib/video-url.ts canonicalUrl 一致) */
+function canonicalUrl(videoId: string, siteUrl: string): string {
+  switch (platformOf(videoId)) {
+    case "tiktok":
+      return `https://www.tiktok.com/@tiktok/video/${videoId.slice(3)}`;
+    case "instagram":
+      return `https://www.instagram.com/reel/${videoId.slice(3)}/`;
+    case "upload":
+      return `${siteUrl}/watch/up/${videoId.slice(3)}`;
+    default:
+      return `https://www.youtube.com/watch?v=${videoId}`;
+  }
 }

@@ -56,6 +56,8 @@ export interface SvtSettings {
   summaryTemplate: string;
   includeTranscript: boolean;
   includeQuiz: boolean;
+  /** 把你在网站上和这条视频的问答记录也带进笔记 */
+  includeQa: boolean;
   /** YouTube / TikTok 笔记嵌入播放器(svt-video 块);关掉则放缩略图 */
   embedPlayer: boolean;
   openAfterCreate: boolean;
@@ -78,6 +80,7 @@ export const DEFAULT_SETTINGS: SvtSettings = {
   summaryTemplate: "chapter_summary",
   includeTranscript: true,
   includeQuiz: false,
+  includeQa: true,
   embedPlayer: true,
   openAfterCreate: true,
   bypassSecret: "",
@@ -213,6 +216,16 @@ export class SvtSettingTab extends PluginSettingTab {
       .addToggle((t) =>
         t.setValue(s.includeQuiz).onChange(async (v) => {
           s.includeQuiz = v;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Include Q&A history")
+      .setDesc("Questions you asked about the video on the website, with the answers.")
+      .addToggle((t) =>
+        t.setValue(s.includeQa).onChange(async (v) => {
+          s.includeQa = v;
           await this.plugin.saveSettings();
         }),
       );
