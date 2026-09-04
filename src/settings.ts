@@ -56,7 +56,7 @@ export interface SvtSettings {
   summaryTemplate: string;
   includeTranscript: boolean;
   includeQuiz: boolean;
-  /** YouTube 笔记嵌入播放器(svt-video 块);关掉则放缩略图 */
+  /** YouTube / TikTok 笔记嵌入播放器(svt-video 块);关掉则放缩略图 */
   embedPlayer: boolean;
   openAfterCreate: boolean;
   /**
@@ -218,9 +218,9 @@ export class SvtSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Embed YouTube player")
+      .setName("Embed video player")
       .setDesc(
-        "Put a player at the top of the note. Timestamp links then jump the player instead of opening the browser.",
+        "YouTube and TikTok: put a player at the top of the note. Timestamp links then jump the player instead of opening the browser.",
       )
       .addToggle((t) =>
         t.setValue(s.embedPlayer).onChange(async (v) => {

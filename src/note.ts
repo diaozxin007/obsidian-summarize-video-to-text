@@ -7,12 +7,14 @@
  *   → 图(可选,只有主站渲染校验过的 mermaid 才放)→ 测验(可选,答案折叠)
  *   → 字幕(可选,折叠 callout)
  *
- * 时间戳链接:YouTube 用 `watch?v=ID&t=NNs` 能直接跳到秒;TikTok / IG / 上传文件
- * 没有跳秒参数,只写纯文本时间。
+ * 时间戳链接:YouTube 用 `watch?v=ID&t=NNs` 浏览器里也能跳到秒;TikTok 用自定义
+ * `?t=NN`,只有插件的嵌入播放器认;IG / 上传文件没有可跳的地址,只写纯文本时间。
  */
 
 import type { Platform, QuizQuestion, VideoAnalysis } from "./types";
-import { videoBlock } from "./video";
+import { canEmbed, platformOf, timestampUrl, videoBlock } from "./video";
+
+export { platformOf };
 
 export interface NoteInput {
   url: string;
@@ -21,7 +23,7 @@ export interface NoteInput {
   title?: string;
   channel?: string;
   thumbnail?: string;
-  /** YouTube 视频放 ```svt-video 播放器块代替缩略图(插件渲染,时间戳可原地跳秒) */
+  /** YouTube / TikTok 放 ```svt-video 播放器块代替缩略图(插件渲染,时间戳可原地跳秒) */
   embedPlayer?: boolean;
   /** 输出语言代码,写进 frontmatter.lang */
   lang: string;
@@ -29,15 +31,6 @@ export interface NoteInput {
   quiz?: QuizQuestion[];
   transcript?: { text: string; lang: string };
   createdAt: Date;
-}
-
-/** 主站 compositeId 规则:tt-/ig-/up- 前缀,其余是 YouTube 11 位 id */
-export function platformOf(videoId: string): Platform {
-  if (videoId.startsWith("tt-")) return "tiktok";
-  if (videoId.startsWith("ig-")) return "instagram";
-  if (videoId.startsWith("up-")) return "upload";
-  if (/^[\w-]{11}$/.test(videoId)) return "youtube";
-  return "other";
 }
 
 export function formatTime(ms: number): string {
@@ -50,12 +43,10 @@ export function formatTime(ms: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-export function timestampLink(platform: Platform, videoId: string, ms: number): string {
+export function timestampLink(platform: Platform, videoId: string, ms: number, sourceUrl?: string): string {
   const label = formatTime(ms);
-  if (platform === "youtube") {
-    return `[${label}](https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(ms / 1000)}s)`;
-  }
-  return label;
+  const href = timestampUrl(platform, videoId, Math.floor(ms / 1000), sourceUrl);
+  return href ? `[${label}](${href})` : label;
 }
 
 /** Obsidian 文件名不能含 \ / : * ? " < > | ,链接语法里 # ^ [ ] 也会出问题 */
@@ -117,7 +108,7 @@ export function buildNote(input: NoteInput): string {
   const out: string[] = [fm.join("\n"), ""];
   out.push(`# ${title}`, "");
   out.push(`[Open video](${input.url})`, "");
-  if (input.embedPlayer && platform === "youtube") {
+  if (input.embedPlayer && canEmbed(platform)) {
     out.push(videoBlock(videoId, input.title), "");
   } else if (input.thumbnail) {
     out.push(`![thumbnail](${input.thumbnail})`, "");
@@ -138,9 +129,9 @@ export function buildNote(input: NoteInput): string {
   if (analysis.chapters.length) {
     out.push("## Chapters", "");
     for (const ch of analysis.chapters) {
-      out.push(`### ${timestampLink(platform, videoId, ch.startMs)} ${ch.title}`, "");
+      out.push(`### ${timestampLink(platform, videoId, ch.startMs, input.url)} ${ch.title}`, "");
       for (const p of ch.points) {
-        out.push(`- ${timestampLink(platform, videoId, p.timeMs)} ${p.text}`);
+        out.push(`- ${timestampLink(platform, videoId, p.timeMs, input.url)} ${p.text}`);
       }
       out.push("");
     }
@@ -158,7 +149,7 @@ export function buildNote(input: NoteInput): string {
   if (input.quiz?.length) {
     out.push("## Quiz", "");
     input.quiz.forEach((q, i) => {
-      out.push(`${i + 1}. ${q.question} ${timestampLink(platform, videoId, q.timeMs)}`);
+      out.push(`${i + 1}. ${q.question} ${timestampLink(platform, videoId, q.timeMs, input.url)}`);
       q.options.forEach((opt, j) => out.push(`   - ${LETTERS[j] ?? j + 1}. ${opt}`));
       const ans = LETTERS[q.answer] ?? String(q.answer + 1);
       out.push("", "   > [!success]- Answer", `   > **${ans}.** ${q.explanation}`.trimEnd(), "");

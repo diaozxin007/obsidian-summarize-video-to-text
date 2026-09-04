@@ -3,7 +3,7 @@
 Turn a YouTube, TikTok or Instagram video into a structured Obsidian note in one command:
 
 - **TL;DR** callout and **key insights**
-- **Embedded YouTube player** at the top of the note; timestamp links seek it in place
+- **Embedded player** (YouTube and TikTok) at the top of the note; timestamp links seek it in place
 - **Chapters** with timestamped bullet points (outside Obsidian the timestamps are plain YouTube links that jump to the second)
 - Optional **summary** in one of several templates (bullet, table, chapter digest, …)
 - Optional **quiz** with collapsed answers
@@ -37,7 +37,7 @@ Notes are created in the folder you choose (default `Video Notes`) and opened au
 | Include transcript | Append the timestamped transcript (collapsed). |
 | Include summary | Also request a template summary. Counts as an extra summary on your plan. |
 | Include quiz | Add multiple-choice questions with collapsed answers. |
-| Embed YouTube player | Put a `svt-video` block (rendered as a player) at the top instead of the thumbnail. Clicking a timestamp seeks the player; with the player off, or for TikTok / Instagram, timestamps open the browser. |
+| Embed video player | YouTube and TikTok: put a `svt-video` block (rendered as a player) at the top instead of the thumbnail. Clicking a timestamp seeks the player. With the player off, YouTube timestamps open the browser at that second; TikTok links open the video from the start (TikTok has no seek parameter). Instagram and uploads keep the thumbnail. |
 | Open note after creating | Self-explanatory. |
 | Server URL | Advanced. Only change to test a preview deployment. |
 | Preview bypass secret | Advanced. Vercel *Protection Bypass for Automation* secret, only needed for a protected preview server. |

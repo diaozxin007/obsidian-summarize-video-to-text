@@ -40,11 +40,15 @@ describe("helpers", () => {
     expect(platformOf("up-xyz")).toBe("upload");
   });
 
-  it("links YouTube timestamps to the second, plain text elsewhere", () => {
+  it("links YouTube and TikTok timestamps, plain text elsewhere", () => {
     expect(timestampLink("youtube", "dQw4w9WgXcQ", 12000)).toBe(
       "[00:12](https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=12s)",
     );
-    expect(timestampLink("tiktok", "tt-1", 12000)).toBe("00:12");
+    expect(timestampLink("tiktok", "tt-12345", 12000, "https://www.tiktok.com/@a/video/12345")).toBe(
+      "[00:12](https://www.tiktok.com/@a/video/12345?t=12)",
+    );
+    expect(timestampLink("instagram", "ig-abc", 12000)).toBe("00:12");
+    expect(timestampLink("upload", "up-abc", 12000)).toBe("00:12");
   });
 
   it("sanitizes file names and tags", () => {
@@ -85,20 +89,30 @@ describe("buildNote", () => {
     expect(md.endsWith("\n")).toBe(true);
   });
 
-  it("embeds a player block instead of the thumbnail when asked (YouTube only)", () => {
+  it("embeds a player block instead of the thumbnail when asked (YouTube and TikTok)", () => {
     const md = buildNote({ ...base, title: "T", thumbnail: "https://i/1.jpg", embedPlayer: true });
     expect(md).toContain("[Open video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n\n```svt-video\nid: dQw4w9WgXcQ\ntitle: T\n```");
     expect(md).not.toContain("![thumbnail]");
     const tt = buildNote({
       ...base,
-      url: "https://www.tiktok.com/@a/video/1",
-      videoId: "tt-1",
-      analysis: { ...analysis, videoId: "tt-1" },
+      url: "https://www.tiktok.com/@a/video/12345",
+      videoId: "tt-12345",
+      analysis: { ...analysis, videoId: "tt-12345" },
       thumbnail: "https://i/2.jpg",
       embedPlayer: true,
     });
-    expect(tt).not.toContain("svt-video");
-    expect(tt).toContain("![thumbnail](https://i/2.jpg)");
+    expect(tt).toContain("```svt-video\nid: tt-12345\n```");
+    expect(tt).not.toContain("![thumbnail]");
+    const ig = buildNote({
+      ...base,
+      url: "https://www.instagram.com/reel/C8CaBfWs1mr/",
+      videoId: "ig-C8CaBfWs1mr",
+      analysis: { ...analysis, videoId: "ig-C8CaBfWs1mr" },
+      thumbnail: "https://i/3.jpg",
+      embedPlayer: true,
+    });
+    expect(ig).not.toContain("svt-video");
+    expect(ig).toContain("![thumbnail](https://i/3.jpg)");
   });
 
   it("falls back to the video id as title", () => {
@@ -140,15 +154,23 @@ describe("buildNote", () => {
     expect(md.indexOf("## Quiz")).toBeLessThan(md.indexOf("Transcript (en)"));
   });
 
-  it("uses plain timestamps for non-YouTube platforms", () => {
-    const md = buildNote({
+  it("uses TikTok links with ?t= and plain timestamps for Instagram", () => {
+    const tt = buildNote({
       ...base,
-      url: "https://www.tiktok.com/@a/video/1",
-      videoId: "tt-1",
-      analysis: { ...analysis, videoId: "tt-1" },
+      url: "https://www.tiktok.com/@a/video/12345",
+      videoId: "tt-12345",
+      analysis: { ...analysis, videoId: "tt-12345" },
     });
-    expect(md).toContain("platform: tiktok");
-    expect(md).toContain("### 00:00 Intro");
-    expect(md).not.toContain("youtube.com/watch");
+    expect(tt).toContain("platform: tiktok");
+    expect(tt).toContain("### [00:00](https://www.tiktok.com/@a/video/12345?t=0) Intro");
+    expect(tt).not.toContain("youtube.com/watch");
+    const ig = buildNote({
+      ...base,
+      url: "https://www.instagram.com/reel/C8CaBfWs1mr/",
+      videoId: "ig-C8CaBfWs1mr",
+      analysis: { ...analysis, videoId: "ig-C8CaBfWs1mr" },
+    });
+    expect(ig).toContain("platform: instagram");
+    expect(ig).toContain("### 00:00 Intro");
   });
 });

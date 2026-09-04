@@ -8,6 +8,11 @@
   overflow: hidden;
   background: var(--background-secondary);
 }
+/* TikTok 是竖屏,按 9:16 排,宽度收窄免得占满一屏 */
+.svt-video.svt-video-tiktok {
+  aspect-ratio: 9 / 16;
+  max-width: 340px;
+}
 .svt-video iframe {
   position: absolute;
   inset: 0;
