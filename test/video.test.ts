@@ -6,6 +6,7 @@ import {
   parseVideoLink,
   timestampUrl,
   videoBlock,
+  watchPath,
   watchUrl,
 } from "../src/video";
 import { linkAtLinePos } from "../src/player";
@@ -58,6 +59,15 @@ describe("watch / timestamp urls", () => {
   it("has no link for platforms without a seekable page", () => {
     expect(timestampUrl("instagram", "ig-abc", 5)).toBeNull();
     expect(timestampUrl("upload", "up-abc", 5)).toBeNull();
+  });
+});
+
+describe("watchPath", () => {
+  it("mirrors the site's per-platform watch routes", () => {
+    expect(watchPath("dQw4w9WgXcQ")).toBe("/watch/dQw4w9WgXcQ");
+    expect(watchPath("tt-123")).toBe("/watch/tt/123");
+    expect(watchPath("ig-C8CaBfWs1mr")).toBe("/watch/ig/C8CaBfWs1mr");
+    expect(watchPath("up-abc")).toBe("/watch/up/abc");
   });
 });
 

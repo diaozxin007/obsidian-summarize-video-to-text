@@ -92,6 +92,7 @@ describe("buildNote", () => {
   it("embeds a player block instead of the thumbnail when asked (YouTube and TikTok)", () => {
     const md = buildNote({ ...base, title: "T", thumbnail: "https://i/1.jpg", embedPlayer: true });
     expect(md).toContain("[Open video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n\n```svt-video\nid: dQw4w9WgXcQ\ntitle: T\n```");
+    expect(md).not.toContain("workspace:");
     expect(md).not.toContain("![thumbnail]");
     const tt = buildNote({
       ...base,
@@ -113,6 +114,22 @@ describe("buildNote", () => {
     });
     expect(ig).not.toContain("svt-video");
     expect(ig).toContain("![thumbnail](https://i/3.jpg)");
+  });
+
+  it("links to the site's watch page first when siteUrl is given", () => {
+    const md = buildNote({ ...base, siteUrl: "https://summarizevideototext.com" });
+    expect(md).toContain("workspace: \"https://summarizevideototext.com/watch/dQw4w9WgXcQ\"");
+    expect(md).toContain(
+      "[Open on summarizevideototext.com](https://summarizevideototext.com/watch/dQw4w9WgXcQ) · [Source](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
+    );
+    const tt = buildNote({
+      ...base,
+      siteUrl: "https://pre.summarizevideototext.com",
+      url: "https://www.tiktok.com/@a/video/12345",
+      videoId: "tt-12345",
+      analysis: { ...analysis, videoId: "tt-12345" },
+    });
+    expect(tt).toContain("(https://pre.summarizevideototext.com/watch/tt/12345)");
   });
 
   it("falls back to the video id as title", () => {

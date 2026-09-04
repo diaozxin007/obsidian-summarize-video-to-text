@@ -213,6 +213,7 @@ export default class SvtPlugin extends Plugin {
 
       const content = buildNote({
         url,
+        siteUrl: this.settings.baseUrl,
         videoId,
         analysis,
         title: meta?.title,

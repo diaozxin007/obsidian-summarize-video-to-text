@@ -12,12 +12,19 @@
  */
 
 import type { Platform, QuizQuestion, VideoAnalysis } from "./types";
-import { canEmbed, platformOf, timestampUrl, videoBlock } from "./video";
+import { canEmbed, platformOf, timestampUrl, videoBlock, watchPath } from "./video";
 
 export { platformOf };
 
 export interface NoteInput {
+  /** 用户给的原始视频链接(source) */
   url: string;
+  /**
+   * 主站地址(不带尾斜杠)。给了就在标题下放「Open on <站点>」指向工作区页
+   * (播放器 + 分析 + 问答 + 测验都在那),原链接退居 Source。2026-09-04 用户要求:
+   * 笔记里的「查看视频」应该进我们的页面,不是 YouTube。
+   */
+  siteUrl?: string;
   videoId: string;
   analysis: VideoAnalysis;
   title?: string;
@@ -93,6 +100,7 @@ export function buildNote(input: NoteInput): string {
   const fm: string[] = ["---"];
   fm.push(`title: ${yamlStr(title)}`);
   fm.push(`source: ${yamlStr(input.url)}`);
+  if (input.siteUrl) fm.push(`workspace: ${yamlStr(`${input.siteUrl}${watchPath(videoId)}`)}`);
   fm.push(`video_id: ${yamlStr(videoId)}`);
   fm.push(`platform: ${platform}`);
   if (input.channel) fm.push(`channel: ${yamlStr(input.channel)}`);
@@ -107,7 +115,12 @@ export function buildNote(input: NoteInput): string {
 
   const out: string[] = [fm.join("\n"), ""];
   out.push(`# ${title}`, "");
-  out.push(`[Open video](${input.url})`, "");
+  if (input.siteUrl) {
+    const host = input.siteUrl.replace(/^https?:\/\//, "");
+    out.push(`[Open on ${host}](${input.siteUrl}${watchPath(videoId)}) · [Source](${input.url})`, "");
+  } else {
+    out.push(`[Open video](${input.url})`, "");
+  }
   if (input.embedPlayer && canEmbed(platform)) {
     out.push(videoBlock(videoId, input.title), "");
   } else if (input.thumbnail) {

@@ -97,6 +97,15 @@ export function timestampUrl(platform: Platform, videoId: string, seconds: numbe
   return platform === "youtube" ? `${base}&t=${seconds}s` : `${base}?t=${seconds}`;
 }
 
+/** 主站工作区页路径(同主站 lib/video-url.ts 的 watchPath):笔记里「在网站打开」用 */
+export function watchPath(videoId: string): string {
+  const platform = platformOf(videoId);
+  if (platform === "tiktok") return `/watch/tt/${videoId.slice(3)}`;
+  if (platform === "instagram") return `/watch/ig/${videoId.slice(3)}`;
+  if (platform === "upload") return `/watch/up/${videoId.slice(3)}`;
+  return `/watch/${videoId}`;
+}
+
 export interface VideoBlock {
   id: string;
   platform: "youtube" | "tiktok";
