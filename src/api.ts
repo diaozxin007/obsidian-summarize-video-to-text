@@ -151,11 +151,16 @@ export class SvtApi {
     }
   }
 
-  /** 连接是否有效:/api/quota 走 Bearer,401 即令牌失效。 */
+  /**
+   * 连接是否有效:/api/quota 走 Bearer。主站对无效令牌不回 401,而是当匿名
+   * 处理(plan 为 "anon"),所以带着令牌却拿到 anon 也算令牌失效。
+   */
   async check(): Promise<{ plan?: string } | null> {
     try {
       const r = await this.request<{ plan?: string }>("/api/quota", {});
-      return r.json();
+      const q = r.json();
+      if (this.opts.token && q.plan === "anon") return null;
+      return q;
     } catch (e) {
       if (e instanceof ApiError && e.unauthorized) return null;
       throw e;
