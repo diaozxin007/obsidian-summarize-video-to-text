@@ -13,6 +13,7 @@
 
 import { moment, normalizePath, Notice, Plugin, TFile, type Editor } from "obsidian";
 import { ApiError, SvtApi } from "./api";
+import { BUILD_CHANNEL, VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, UrlModal } from "./modal";
 import { buildNote, safeFileName } from "./note";
 import { DEFAULT_SETTINGS, SvtSettingTab, type SvtSettings } from "./settings";
@@ -27,6 +28,7 @@ export default class SvtPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    if (BUILD_CHANNEL === "debug") console.info(`[summarize-video] debug build → ${this.settings.baseUrl}`);
 
     this.settingTab = new SvtSettingTab(this.app, this);
     this.addSettingTab(this.settingTab);
@@ -72,6 +74,7 @@ export default class SvtPlugin extends Plugin {
       baseUrl: this.settings.baseUrl,
       token: this.settings.token,
       uiLang: this.uiLang(),
+      bypassSecret: this.settings.bypassSecret,
     });
   }
 
@@ -91,9 +94,16 @@ export default class SvtPlugin extends Plugin {
     this.settings.pendingState = state;
     void this.saveSettings();
     const vault = this.app.vault.getName();
-    const url =
+    let url =
       `${this.settings.baseUrl}/connect/obsidian?state=${encodeURIComponent(state)}` +
       `&vault=${encodeURIComponent(vault)}`;
+    // pre 预览站有 Vercel 部署保护:带上绕过密钥并让 Vercel 种 cookie,
+    // 浏览器随后的登录/签发请求就不会被 SSO 拦下
+    if (this.settings.bypassSecret) {
+      url +=
+        `&${VERCEL_BYPASS_HEADER}=${encodeURIComponent(this.settings.bypassSecret)}` +
+        `&${VERCEL_BYPASS_COOKIE_FLAG}=true`;
+    }
     window.open(url);
     this.settingTab?.display();
   }

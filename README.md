@@ -38,6 +38,7 @@ Notes are created in the folder you choose (default `Video Notes`) and opened au
 | Include quiz | Add multiple-choice questions with collapsed answers. |
 | Open note after creating | Self-explanatory. |
 | Server URL | Advanced. Only change to test a preview deployment. |
+| Preview bypass secret | Advanced. Vercel *Protection Bypass for Automation* secret, only needed for a protected preview server. |
 
 ## Privacy and network use
 
@@ -49,10 +50,13 @@ Notes are created in the folder you choose (default `Video Notes`) and opened au
 
 ```bash
 npm install
-npm run dev      # watch build → main.js
-npm test         # vitest: note rendering + SSE parsing
-npm run build    # typecheck + minified main.js
+npm run dev          # watch build → main.js (debug channel)
+npm run build:debug  # one-off debug build
+npm test             # vitest: note rendering + SSE parsing
+npm run build        # release: typecheck + minified main.js
 ```
+
+Build channels: `dev` and `build:debug` produce a **debug** build whose default server is the preview site `https://pre.summarizevideototext.com`; `build` produces the **release** build pointing at `https://summarizevideototext.com`. The channel and default are shown under *Settings → Advanced*. The preview site sits behind Vercel Deployment Protection, so a debug build also needs the *Preview bypass secret* setting (never commit it).
 
 Copy `main.js`, `manifest.json` (and `styles.css` if present) into `<vault>/.obsidian/plugins/summarize-video-to-text/` to test locally.
 

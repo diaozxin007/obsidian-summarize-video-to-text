@@ -11,9 +11,10 @@
  */
 
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { BUILD_CHANNEL, DEFAULT_BASE_URL } from "./build";
 import type SvtPlugin from "./main";
 
-export const DEFAULT_BASE_URL = "https://summarizevideototext.com";
+export { DEFAULT_BASE_URL };
 
 export const OUTPUT_LANGS: Array<{ code: string; name: string }> = [
   { code: "", name: "Auto (follow Obsidian)" },
@@ -56,6 +57,12 @@ export interface SvtSettings {
   includeTranscript: boolean;
   includeQuiz: boolean;
   openAfterCreate: boolean;
+  /**
+   * Vercel 部署保护的绕过密钥(Protection Bypass for Automation)。只有 debug 包
+   * 连 pre 预览站时才需要;请求加 x-vercel-protection-bypass 头,连接页 URL 也带上
+   * 让浏览器种绕过 cookie。生产站不需要,留空即可。
+   */
+  bypassSecret: string;
 }
 
 export const DEFAULT_SETTINGS: SvtSettings = {
@@ -70,6 +77,7 @@ export const DEFAULT_SETTINGS: SvtSettings = {
   includeTranscript: true,
   includeQuiz: false,
   openAfterCreate: true,
+  bypassSecret: "",
 };
 
 export class SvtSettingTab extends PluginSettingTab {
@@ -220,12 +228,29 @@ export class SvtSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Server URL")
-      .setDesc("Only change this if you were told to (e.g. to test a preview deployment).")
+      .setDesc(
+        `This is a ${BUILD_CHANNEL} build; the default is ${DEFAULT_BASE_URL}. ` +
+          "Only change this if you were told to (e.g. to test a preview deployment).",
+      )
       .addText((t) =>
         t.setPlaceholder(DEFAULT_BASE_URL).setValue(s.baseUrl).onChange(async (v) => {
           s.baseUrl = v.trim().replace(/\/+$/, "") || DEFAULT_BASE_URL;
           await this.plugin.saveSettings();
         }),
       );
+
+    new Setting(containerEl)
+      .setName("Preview bypass secret")
+      .setDesc(
+        "Only for preview servers behind Vercel Deployment Protection. Sent as the " +
+          "x-vercel-protection-bypass header; leave empty for the public site.",
+      )
+      .addText((t) => {
+        t.inputEl.type = "password";
+        t.setValue(s.bypassSecret).onChange(async (v) => {
+          s.bypassSecret = v.trim();
+          await this.plugin.saveSettings();
+        });
+      });
   }
 }

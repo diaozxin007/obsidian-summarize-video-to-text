@@ -12,6 +12,7 @@
  */
 
 import { requestUrl } from "obsidian";
+import { VERCEL_BYPASS_HEADER } from "./build";
 import { collectSummary, SseError } from "./sse";
 import type { QuizQuestion, TranscriptResult, VideoAnalysis, VideoMeta } from "./types";
 
@@ -35,6 +36,8 @@ export interface ApiOptions {
   token: string;
   /** 主站 UI 语言,决定错误文案和默认输出语言(只认 en/zh) */
   uiLang: "en" | "zh";
+  /** Vercel 部署保护绕过密钥;debug 包连 pre 时用,空则不发该头 */
+  bypassSecret?: string;
 }
 
 const PLUGIN_UA = "obsidian-summarize-video-to-text";
@@ -52,6 +55,7 @@ export class SvtApi {
       "X-Client": PLUGIN_UA,
     };
     if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;
+    if (this.opts.bypassSecret) headers[VERCEL_BYPASS_HEADER] = this.opts.bypassSecret;
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
     let res;
     try {
