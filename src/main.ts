@@ -6,16 +6,17 @@
  *      obsidian://svt-connect 回来(registerObsidianProtocolHandler),核对 state 存 token。
  *   2. 命令「Summarize video from URL」:弹窗要链接 → 调主站 analyze(+ 可选
  *      transcript / summarize / quiz)→ note.ts 拼笔记 → 写进设定目录并打开。
- *   3. 编辑器命令:选中一个链接直接跑,不弹窗。
+ *   3. 编辑器命令:选中一个链接直接跑,不弹窗;右键菜单对光标下/选中的链接、
+ *      以及阅读视图里的外链也有「Summarize video」。
  *   4. 嵌入播放器:渲染 ```svt-video 块,拦截时间戳链接的点击原地跳秒(player.ts)。
  *
  * 所有 AI 计算都在主站做,插件不存密钥、不调模型;配额和积分也由主站按账号扣。
  */
 
-import { moment, normalizePath, Notice, Plugin, TFile, type Editor } from "obsidian";
+import { moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu } from "obsidian";
 import { ApiError, SvtApi } from "./api";
 import { BUILD_CHANNEL, VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
-import { extractUrl, UrlModal } from "./modal";
+import { extractUrl, urlAtColumn, UrlModal, type RunOptions } from "./modal";
 import { buildNote, safeFileName } from "./note";
 import { editorClickExtension, handleDocumentClick, renderVideoBlock } from "./player";
 import { VIDEO_BLOCK_LANG } from "./video";
@@ -43,7 +44,7 @@ export default class SvtPlugin extends Plugin {
     this.addCommand({
       id: "summarize-video-url",
       name: "Summarize video from URL",
-      callback: () => new UrlModal(this.app, "", (url) => void this.run(url)).open(),
+      callback: () => this.openModal(""),
     });
 
     this.addCommand({
@@ -57,14 +58,48 @@ export default class SvtPlugin extends Plugin {
       },
     });
 
-    this.addRibbonIcon("video", "Summarize video", () =>
-      new UrlModal(this.app, "", (url) => void this.run(url)).open(),
+    this.addRibbonIcon("video", "Summarize video", () => this.openModal(""));
+
+    // 右键菜单:编辑器里光标下 / 选区里的链接
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor) => {
+        const cur = editor.getCursor();
+        const url = extractUrl(editor.getSelection()) || urlAtColumn(editor.getLine(cur.line), cur.ch);
+        if (url) this.addMenuItem(menu, url);
+      }),
+    );
+    // 右键菜单:阅读视图 / 实时预览里渲染出来的外链
+    this.registerEvent(
+      this.app.workspace.on("url-menu", (menu: Menu, url: string) => {
+        if (/^https?:\/\//i.test(url)) this.addMenuItem(menu, url);
+      }),
     );
 
     // 嵌入播放器 + 时间戳跳秒
     this.registerMarkdownCodeBlockProcessor(VIDEO_BLOCK_LANG, (source, el) => renderVideoBlock(source, el));
     this.registerDomEvent(document, "click", handleDocumentClick, { capture: true });
     this.registerEditorExtension(editorClickExtension());
+  }
+
+  private addMenuItem(menu: Menu, url: string): void {
+    menu.addItem((item) =>
+      item
+        .setTitle("Summarize video")
+        .setIcon("video")
+        .setSection("action")
+        .onClick(() => this.openModal(url)),
+    );
+  }
+
+  private openModal(initial: string): void {
+    new UrlModal(this.app, initial, this.defaultRunOptions(), (url, opts) => void this.run(url, opts)).open();
+  }
+
+  private defaultRunOptions(): RunOptions {
+    return {
+      outputLang: this.settings.outputLang,
+      summaryTemplate: this.settings.includeSummary ? this.settings.summaryTemplate : "",
+    };
   }
 
   // ---------- 设置 ----------
@@ -91,8 +126,8 @@ export default class SvtPlugin extends Plugin {
     return moment.locale().toLowerCase().startsWith("zh") ? "zh" : "en";
   }
 
-  private outputLang(): string {
-    return this.settings.outputLang || this.uiLang();
+  private outputLang(override?: string): string {
+    return (override ?? this.settings.outputLang) || this.uiLang();
   }
 
   // ---------- 连接 ----------
@@ -147,7 +182,9 @@ export default class SvtPlugin extends Plugin {
 
   // ---------- 主流程 ----------
 
-  async run(url: string): Promise<void> {
+  /** opts 缺省时按设置来(命令「link in selection」不弹窗,走这条) */
+  async run(url: string, opts?: RunOptions): Promise<void> {
+    const o = opts ?? this.defaultRunOptions();
     if (this.running) {
       new Notice("Summarize Video: already working on a video, please wait.");
       return;
@@ -160,7 +197,7 @@ export default class SvtPlugin extends Plugin {
     const notice = new Notice("Summarize Video: analyzing…", 0);
     try {
       const api = this.api();
-      const outputLang = this.outputLang();
+      const outputLang = this.outputLang(o.outputLang);
 
       const analysis = await api.analyze(url, outputLang);
       const videoId = analysis.videoId;
@@ -170,9 +207,7 @@ export default class SvtPlugin extends Plugin {
       const [meta, transcript, summary, quiz] = await Promise.all([
         api.meta(videoId),
         this.settings.includeTranscript ? soft(() => api.transcript(url)) : null,
-        this.settings.includeSummary
-          ? soft(() => api.summarize(url, outputLang, this.settings.summaryTemplate))
-          : null,
+        o.summaryTemplate ? soft(() => api.summarize(url, outputLang, o.summaryTemplate)) : null,
         this.settings.includeQuiz ? soft(() => api.quiz(videoId, outputLang, undefined)) : null,
       ]);
 
@@ -185,7 +220,7 @@ export default class SvtPlugin extends Plugin {
         thumbnail: meta?.thumbnail,
         embedPlayer: this.settings.embedPlayer,
         lang: outputLang,
-        summary: summary ? { template: this.settings.summaryTemplate, text: summary } : undefined,
+        summary: summary ? { template: o.summaryTemplate, text: summary } : undefined,
         quiz: (quiz as QuizQuestion[] | null) ?? undefined,
         transcript: (transcript as TranscriptResult | null) ?? undefined,
         createdAt: new Date(),

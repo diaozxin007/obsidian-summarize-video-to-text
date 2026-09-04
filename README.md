@@ -22,8 +22,9 @@ Free accounts get a daily allowance of summaries; Pro removes the daily cap. See
 
 ## Usage
 
-- **Command palette → Summarize video from URL**: paste a link (the clipboard is pre-filled if it holds a link).
-- **Select a link in a note → Summarize video link in selection**.
+- **Command palette → Summarize video from URL**: paste a link (the clipboard is pre-filled if it holds a link). The dialog lets you pick the output language and an optional summary template for this note only.
+- **Right-click a link** in the editor or in reading view → **Summarize video**.
+- **Select a link in a note → Summarize video link in selection** (no dialog, uses your settings).
 - Or click the video icon in the ribbon.
 
 Notes are created in the folder you choose (default `Video Notes`) and opened automatically.
