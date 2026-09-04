@@ -7,6 +7,7 @@
  *   2. 命令「Summarize video from URL」:弹窗要链接 → 调主站 analyze(+ 可选
  *      transcript / summarize / quiz)→ note.ts 拼笔记 → 写进设定目录并打开。
  *   3. 编辑器命令:选中一个链接直接跑,不弹窗。
+ *   4. 嵌入播放器:渲染 ```svt-video 块,拦截时间戳链接的点击原地跳秒(player.ts)。
  *
  * 所有 AI 计算都在主站做,插件不存密钥、不调模型;配额和积分也由主站按账号扣。
  */
@@ -16,6 +17,8 @@ import { ApiError, SvtApi } from "./api";
 import { BUILD_CHANNEL, VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, UrlModal } from "./modal";
 import { buildNote, safeFileName } from "./note";
+import { editorClickExtension, handleDocumentClick, renderVideoBlock } from "./player";
+import { VIDEO_BLOCK_LANG } from "./video";
 import { DEFAULT_SETTINGS, SvtSettingTab, type SvtSettings } from "./settings";
 import type { QuizQuestion, TranscriptResult } from "./types";
 
@@ -57,6 +60,11 @@ export default class SvtPlugin extends Plugin {
     this.addRibbonIcon("video", "Summarize video", () =>
       new UrlModal(this.app, "", (url) => void this.run(url)).open(),
     );
+
+    // 嵌入播放器 + 时间戳跳秒
+    this.registerMarkdownCodeBlockProcessor(VIDEO_BLOCK_LANG, (source, el) => renderVideoBlock(source, el));
+    this.registerDomEvent(document, "click", handleDocumentClick, { capture: true });
+    this.registerEditorExtension(editorClickExtension());
   }
 
   // ---------- 设置 ----------
@@ -175,6 +183,7 @@ export default class SvtPlugin extends Plugin {
         title: meta?.title,
         channel: meta?.channel,
         thumbnail: meta?.thumbnail,
+        embedPlayer: this.settings.embedPlayer,
         lang: outputLang,
         summary: summary ? { template: this.settings.summaryTemplate, text: summary } : undefined,
         quiz: (quiz as QuizQuestion[] | null) ?? undefined,

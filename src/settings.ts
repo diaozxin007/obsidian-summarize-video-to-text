@@ -56,6 +56,8 @@ export interface SvtSettings {
   summaryTemplate: string;
   includeTranscript: boolean;
   includeQuiz: boolean;
+  /** YouTube 笔记嵌入播放器(svt-video 块);关掉则放缩略图 */
+  embedPlayer: boolean;
   openAfterCreate: boolean;
   /**
    * Vercel 部署保护的绕过密钥(Protection Bypass for Automation)。只有 debug 包
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: SvtSettings = {
   summaryTemplate: "chapter_summary",
   includeTranscript: true,
   includeQuiz: false,
+  embedPlayer: true,
   openAfterCreate: true,
   bypassSecret: "",
 };
@@ -210,6 +213,18 @@ export class SvtSettingTab extends PluginSettingTab {
       .addToggle((t) =>
         t.setValue(s.includeQuiz).onChange(async (v) => {
           s.includeQuiz = v;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Embed YouTube player")
+      .setDesc(
+        "Put a player at the top of the note. Timestamp links then jump the player instead of opening the browser.",
+      )
+      .addToggle((t) =>
+        t.setValue(s.embedPlayer).onChange(async (v) => {
+          s.embedPlayer = v;
           await this.plugin.saveSettings();
         }),
       );

@@ -3,7 +3,7 @@
  *
  * 纯函数,不 import obsidian —— 这样 vitest 能直接测。笔记结构:
  *   frontmatter(title/source/video_id/platform/channel/lang/tags/created)
- *   缩略图 → TL;DR callout → 关键洞见 → 章节(时间戳链接)→ 摘要(可选)
+ *   播放器(YouTube,可选;否则缩略图)→ TL;DR callout → 关键洞见 → 章节(时间戳链接)→ 摘要(可选)
  *   → 图(可选,只有主站渲染校验过的 mermaid 才放)→ 测验(可选,答案折叠)
  *   → 字幕(可选,折叠 callout)
  *
@@ -12,6 +12,7 @@
  */
 
 import type { Platform, QuizQuestion, VideoAnalysis } from "./types";
+import { videoBlock } from "./video";
 
 export interface NoteInput {
   url: string;
@@ -20,6 +21,8 @@ export interface NoteInput {
   title?: string;
   channel?: string;
   thumbnail?: string;
+  /** YouTube 视频放 ```svt-video 播放器块代替缩略图(插件渲染,时间戳可原地跳秒) */
+  embedPlayer?: boolean;
   /** 输出语言代码,写进 frontmatter.lang */
   lang: string;
   summary?: { template: string; text: string };
@@ -114,7 +117,11 @@ export function buildNote(input: NoteInput): string {
   const out: string[] = [fm.join("\n"), ""];
   out.push(`# ${title}`, "");
   out.push(`[Open video](${input.url})`, "");
-  if (input.thumbnail) out.push(`![thumbnail](${input.thumbnail})`, "");
+  if (input.embedPlayer && platform === "youtube") {
+    out.push(videoBlock(videoId, input.title), "");
+  } else if (input.thumbnail) {
+    out.push(`![thumbnail](${input.thumbnail})`, "");
+  }
 
   if (analysis.overview.tldr) {
     out.push("> [!summary] TL;DR", quoteBlock(analysis.overview.tldr), "");

@@ -1,0 +1,17 @@
+/* Summarize Video To Text — 嵌入播放器 */
+.svt-video {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0.5em 0 1em;
+  border-radius: var(--radius-m, 8px);
+  overflow: hidden;
+  background: var(--background-secondary);
+}
+.svt-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

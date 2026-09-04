@@ -85,6 +85,22 @@ describe("buildNote", () => {
     expect(md.endsWith("\n")).toBe(true);
   });
 
+  it("embeds a player block instead of the thumbnail when asked (YouTube only)", () => {
+    const md = buildNote({ ...base, title: "T", thumbnail: "https://i/1.jpg", embedPlayer: true });
+    expect(md).toContain("[Open video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)\n\n```svt-video\nid: dQw4w9WgXcQ\ntitle: T\n```");
+    expect(md).not.toContain("![thumbnail]");
+    const tt = buildNote({
+      ...base,
+      url: "https://www.tiktok.com/@a/video/1",
+      videoId: "tt-1",
+      analysis: { ...analysis, videoId: "tt-1" },
+      thumbnail: "https://i/2.jpg",
+      embedPlayer: true,
+    });
+    expect(tt).not.toContain("svt-video");
+    expect(tt).toContain("![thumbnail](https://i/2.jpg)");
+  });
+
   it("falls back to the video id as title", () => {
     const md = buildNote(base);
     expect(md).toContain("# Video dQw4w9WgXcQ");
