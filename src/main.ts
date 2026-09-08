@@ -46,7 +46,10 @@ export default class SvtPlugin extends Plugin {
       void this.handleConnectCallback(params.token ?? "", params.state ?? "");
     });
     this.registerObsidianProtocolHandler(IMPORT_ACTION, (params) => {
-      void this.importFromSite(params.videoId ?? "", params.outputLang ?? "");
+      void this.importFromSite(params.videoId ?? "", params.outputLang ?? "", {
+        template: params.template ?? "",
+        length: params.length ?? "",
+      });
     });
 
     this.addCommand({
@@ -241,8 +244,12 @@ export default class SvtPlugin extends Plugin {
     }
   }
 
-  /** 网站导出按钮 → obsidian://svt-import?videoId=…&outputLang=…:分析已在网站做过 */
-  private async importFromSite(videoId: string, outputLang: string): Promise<void> {
+  /**
+   * 网站导出按钮 → obsidian://svt-import?videoId=…&outputLang=…&template=…&length=…:
+   * 分析已在网站做过;template/length 是用户在网站上看的那份详细总结,服务端按它查缓存
+   * (2026-09-08 之前这条路的笔记永远没有摘要段)。
+   */
+  private async importFromSite(videoId: string, outputLang: string, summary: { template: string; length: string }): Promise<void> {
     if (!/^([\w-]{11}|tt-\d+|ig-[\w-]+|up-[\w-]+)$/.test(videoId)) {
       new Notice("Summarize Video: ignored an import link with a bad video id.");
       return;
@@ -256,6 +263,7 @@ export default class SvtPlugin extends Plugin {
         outputLang: outputLang || this.outputLang(),
         include: this.include(),
         embedPlayer: this.settings.embedPlayer,
+        summary: summary.template ? { template: summary.template, length: summary.length || undefined } : undefined,
       });
       const file = await this.writeNote(safeFileName(note.fileName), note.markdown);
       notice.hide();
@@ -285,16 +293,21 @@ export default class SvtPlugin extends Plugin {
       const videoId = videoIdOf(existing);
       if (!videoId) throw new Error("This note has no video_id in its frontmatter.");
       const cache = this.app.metadataCache.getFileCache(file);
-      const lang = typeof cache?.frontmatter?.lang === "string" ? cache.frontmatter.lang : this.outputLang();
-      const summaryText = summaryOf(existing);
+      const fm = cache?.frontmatter ?? {};
+      const lang = typeof fm.lang === "string" ? fm.lang : this.outputLang();
+      // 摘要:frontmatter 记着当初的模板/长度就按它让服务端查缓存(可能已更新);
+      // 老笔记没记的,把现有摘要段原文递回去,免得刷新把它刷没了
+      const template = typeof fm.summary_template === "string" ? fm.summary_template : "";
+      const length = typeof fm.summary_length === "string" ? fm.summary_length : undefined;
+      const summaryText = template ? undefined : summaryOf(existing);
       const note = await this.api().exportNote({
         videoId,
         outputLang: lang,
         include: this.include(),
         embedPlayer: this.settings.embedPlayer,
-        summary: summaryText ? { template: "", text: summaryText } : undefined,
+        summary: template ? { template, length } : summaryText ? { template: "", text: summaryText } : undefined,
       });
-      const merged = mergeNote(existing, note.markdown);
+      const merged = mergeNote(existing, note.markdown, note.ownedKeys);
       if (!merged) throw new Error("Could not find the %% svt:start %% / %% svt:end %% markers in this note.");
       await this.app.vault.modify(file, merged);
       notice.hide();

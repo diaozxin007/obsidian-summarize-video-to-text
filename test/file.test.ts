@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeNote, safeFileName, summaryOf, videoIdOf } from "../src/file";
+import { mergeNote, OWNED_FM_KEYS, safeFileName, summaryOf, videoIdOf } from "../src/file";
 
 const fresh = `---
 title: "New title"
@@ -101,6 +101,25 @@ describe("mergeNote", () => {
     expect(m2).not.toContain("quiz_best");
     expect(m2).toContain("status: learning");
   });
+  it("uses the server's ownedKeys when given (older bundled list stays a fallback)", () => {
+    // 服务端把 summary_template 归为自己的键后,插件不升级也该跟着换
+    const withTpl = fresh.replace("generator:", "summary_template: bullet_summary\ngenerator:");
+    const old = merged.replace("generator:", "summary_template: mind_map\ngenerator:");
+    const m = mergeNote(old, withTpl, [...OWNED_FM_KEYS.filter((k) => k !== "summary_template"), "summary_template"])!;
+    expect(m).toContain("summary_template: bullet_summary");
+    expect(m).not.toContain("mind_map");
+    // 不在 ownedKeys 里的键当用户键保留
+    const keep = mergeNote(old, withTpl, OWNED_FM_KEYS.filter((k) => k !== "summary_template"))!;
+    expect(keep).toContain("summary_template: mind_map");
+  });
+
+  it("bundled OWNED_FM_KEYS matches the site's list", () => {
+    expect([...OWNED_FM_KEYS]).toEqual([
+      "title", "source", "workspace", "video_id", "platform", "channel", "lang", "tags",
+      "updated", "summary_template", "summary_length", "quiz_best", "quiz_attempts", "generator",
+    ]);
+  });
+
   it("returns null without markers", () => {
     expect(mergeNote("# plain note", fresh)).toBeNull();
   });

@@ -9,11 +9,14 @@
 export const SVT_START = "%% svt:start %%";
 export const SVT_END = "%% svt:end %%";
 
-/** 主站 export-obsidian.ts 的 OWNED_FM_KEYS,两边要一致 */
-const OWNED_FM_KEYS = new Set([
+/**
+ * 主站 export-obsidian.ts 的 OWNED_FM_KEYS。导出接口的响应会带一份 ownedKeys
+ * (2026-09-08),mergeNote 优先用它;这份只是老服务端 / 离线测试的兜底。
+ */
+export const OWNED_FM_KEYS: readonly string[] = [
   "title", "source", "workspace", "video_id", "platform", "channel", "lang", "tags",
-  "updated", "quiz_best", "quiz_attempts", "generator",
-]);
+  "updated", "summary_template", "summary_length", "quiz_best", "quiz_attempts", "generator",
+];
 
 /** Obsidian 文件名不能含 \ / : * ? " < > | ,链接语法里 # ^ [ ] 也会出问题 */
 export function safeFileName(name: string, fallback = "video"): string {
@@ -83,7 +86,8 @@ function between(md: string): string | null {
 /**
  * 把 fresh(主站刚生成的完整笔记)合进 existing。找不到标记返回 null。
  */
-export function mergeNote(existing: string, fresh: string): string | null {
+export function mergeNote(existing: string, fresh: string, ownedKeys: readonly string[] = OWNED_FM_KEYS): string | null {
+  const OWNED = new Set(ownedKeys);
   const ex = split(existing);
   const fr = split(fresh);
   const exGen = between(ex.body);
@@ -94,13 +98,13 @@ export function mergeNote(existing: string, fresh: string): string | null {
   let fm: FmEntry[] | null = null;
   if (fr.fm) {
     const freshMap = new Map(fr.fm.map((e) => [e.key, e]));
-    fm = (ex.fm ?? []).map((e) => (OWNED_FM_KEYS.has(e.key) && freshMap.has(e.key) ? freshMap.get(e.key)! : e));
+    fm = (ex.fm ?? []).map((e) => (OWNED.has(e.key) && freshMap.has(e.key) ? freshMap.get(e.key)! : e));
     const have = new Set(fm.map((e) => e.key));
     for (const e of fr.fm) {
-      if (!have.has(e.key) && (OWNED_FM_KEYS.has(e.key) || e.key === "created")) fm.push(e);
+      if (!have.has(e.key) && (OWNED.has(e.key) || e.key === "created")) fm.push(e);
     }
     // 用户 frontmatter 里我们已不再输出的键(例如这次没有 quiz_best)删掉,免得留旧值
-    fm = fm.filter((e) => !OWNED_FM_KEYS.has(e.key) || freshMap.has(e.key));
+    fm = fm.filter((e) => !OWNED.has(e.key) || freshMap.has(e.key));
   }
 
   const a = ex.body.indexOf(SVT_START);

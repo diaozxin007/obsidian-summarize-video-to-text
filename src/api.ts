@@ -160,9 +160,10 @@ export class SvtApi {
     outputLang: string;
     include: { transcript: boolean; quiz: boolean; qa: boolean };
     embedPlayer: boolean;
-    summary?: { template: string; text: string };
-  }): Promise<{ markdown: string; fileName: string; title: string }> {
-    const r = await this.request<{ markdown?: string; fileName?: string; title?: string }>(
+    /** text 缺省时服务端按 template/length 查网站上生成过的摘要缓存 */
+    summary?: { template: string; length?: string; text?: string };
+  }): Promise<{ markdown: string; fileName: string; title: string; ownedKeys?: string[] }> {
+    const r = await this.request<{ markdown?: string; fileName?: string; title?: string; ownedKeys?: string[] }>(
       "/api/export/obsidian",
       {
         body: {
@@ -178,7 +179,12 @@ export class SvtApi {
     );
     const j = r.json();
     if (!j.markdown) throw new ApiError(r.status, "bad_response", "Unexpected export response", r.requestId);
-    return { markdown: j.markdown, fileName: j.fileName || input.videoId, title: j.title || input.videoId };
+    return {
+      markdown: j.markdown,
+      fileName: j.fileName || input.videoId,
+      title: j.title || input.videoId,
+      ownedKeys: Array.isArray(j.ownedKeys) && j.ownedKeys.every((k) => typeof k === "string") ? j.ownedKeys : undefined,
+    };
   }
 
   /**
