@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules as builtins } from "node:module";
 
 // 三种模式(2026-09-04):
 //   dev        watch,debug 渠道,默认连 pre 预览站

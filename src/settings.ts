@@ -10,7 +10,7 @@
  * 社区插件一样;README 提醒同步 vault 的人注意。
  */
 
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, type SettingDefinitionItem } from "obsidian";
 import { BUILD_CHANNEL, DEFAULT_BASE_URL } from "./build";
 import type SvtPlugin from "./main";
 
@@ -86,199 +86,187 @@ export const DEFAULT_SETTINGS: SvtSettings = {
   bypassSecret: "",
 };
 
+/**
+ * 设置页走 1.13 的声明式 API(getSettingDefinitions):Obsidian 自己渲染并把每一项
+ * 收进设置搜索;状态变化(连接/断开、等待浏览器回调)后由 main.ts 调 update() 重建。
+ * 值的读写默认落到 plugin.settings,这里只覆盖 setControlValue 做归一化和存盘。
+ */
 export class SvtSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: SvtPlugin) {
     super(app, plugin);
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
+  override getControlValue(key: string): unknown {
+    return this.plugin.settings[key as keyof SvtSettings];
+  }
+
+  override async setControlValue(key: string, value: unknown): Promise<void> {
+    const s = this.plugin.settings as unknown as Record<string, unknown>;
+    let v = value;
+    if (key === "folder" && typeof v === "string") v = v.trim().replace(/^\/+|\/+$/g, "");
+    if (key === "baseUrl" && typeof v === "string") v = v.trim().replace(/\/+$/, "") || DEFAULT_BASE_URL;
+    if (key === "bypassSecret" && typeof v === "string") v = v.trim();
+    s[key] = v;
+    await this.plugin.saveSettings();
+    // 「Summary template」只在 includeSummary 打开时显示
+    this.refreshDomState();
+  }
+
+  override getSettingDefinitions(): SettingDefinitionItem<keyof SvtSettings>[] {
     const s = this.plugin.settings;
+    const connected = () => !!this.plugin.settings.token;
 
-    // ---- 账号 ----
-    new Setting(containerEl).setName("Account").setHeading();
-
-    if (s.token) {
-      new Setting(containerEl)
-        .setName("Connected")
-        .setDesc(
-          `Token ${s.token.slice(0, 8)}… · connected ${s.connectedAt ? new Date(s.connectedAt).toLocaleString() : ""}`,
-        )
-        .addButton((b) =>
-          b.setButtonText("Check").onClick(async () => {
-            try {
-              const r = await this.plugin.api().check();
-              new Notice(r ? `Connected (plan: ${r.plan ?? "free"})` : "Token is no longer valid. Reconnect.");
-            } catch (e) {
-              new Notice(`Check failed: ${(e as Error).message}`);
-            }
-          }),
-        )
-        .addButton((b) =>
-          b
-            .setButtonText("Disconnect")
-            .setWarning()
-            .onClick(async () => {
-              s.token = "";
-              s.connectedAt = "";
-              await this.plugin.saveSettings();
-              new Notice("Disconnected. You can revoke the token on the website under Connect → Obsidian.");
-              this.display();
-            }),
-        );
-    } else {
-      new Setting(containerEl)
-        .setName("Connect to summarizevideototext.com")
-        .setDesc(
-          s.pendingState
-            ? "Waiting for the browser… finish signing in, then Obsidian will receive the token automatically."
-            : "Opens the website in your browser. Sign in (or create a free account), and you'll be sent back here.",
-        )
-        .addButton((b) =>
-          b
-            .setButtonText(s.pendingState ? "Open again" : "Connect")
-            .setCta()
-            .onClick(() => this.plugin.startConnect()),
-        );
-
-      new Setting(containerEl)
-        .setName("Or paste a token")
-        .setDesc("If the browser can't open Obsidian, copy the token shown on the website and paste it here.")
-        .addText((t) =>
-          t.setPlaceholder("svt_…").onChange(async (v) => {
-            const token = v.trim();
-            if (!token.startsWith("svt_") || token.length < 20) return;
-            await this.plugin.acceptToken(token);
-            this.display();
-          }),
-        );
-    }
-
-    // ---- 输出 ----
-    new Setting(containerEl).setName("Note").setHeading();
-
-    new Setting(containerEl)
-      .setName("Output language")
-      .setDesc("Language of the generated summary. Auto picks Chinese or English from Obsidian's language.")
-      .addDropdown((d) => {
-        for (const l of OUTPUT_LANGS) d.addOption(l.code, l.name);
-        d.setValue(s.outputLang).onChange(async (v) => {
-          s.outputLang = v;
-          await this.plugin.saveSettings();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName("Folder")
-      .setDesc("Where new notes go. Created if missing. Leave empty for the vault root.")
-      .addText((t) =>
-        t.setPlaceholder("Video Notes").setValue(s.folder).onChange(async (v) => {
-          s.folder = v.trim().replace(/^\/+|\/+$/g, "");
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Include transcript")
-      .setDesc("Append the timestamped transcript in a collapsed callout.")
-      .addToggle((t) =>
-        t.setValue(s.includeTranscript).onChange(async (v) => {
-          s.includeTranscript = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Include summary")
-      .setDesc("Also generate a template summary (counts as an extra summary on your plan).")
-      .addToggle((t) =>
-        t.setValue(s.includeSummary).onChange(async (v) => {
-          s.includeSummary = v;
-          await this.plugin.saveSettings();
-          this.display();
-        }),
-      );
-
-    if (s.includeSummary) {
-      new Setting(containerEl).setName("Summary template").addDropdown((d) => {
-        for (const t of SUMMARY_TEMPLATES) d.addOption(t.id, t.name);
-        d.setValue(s.summaryTemplate).onChange(async (v) => {
-          s.summaryTemplate = v;
-          await this.plugin.saveSettings();
-        });
-      });
-    }
-
-    new Setting(containerEl)
-      .setName("Include quiz")
-      .setDesc("Add multiple-choice questions with collapsed answers.")
-      .addToggle((t) =>
-        t.setValue(s.includeQuiz).onChange(async (v) => {
-          s.includeQuiz = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Include Q&A history")
-      .setDesc("Questions you asked about the video on the website, with the answers.")
-      .addToggle((t) =>
-        t.setValue(s.includeQa).onChange(async (v) => {
-          s.includeQa = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Embed video player")
-      .setDesc(
-        "YouTube and TikTok: put a player at the top of the note. Timestamp links then jump the player instead of opening the browser.",
-      )
-      .addToggle((t) =>
-        t.setValue(s.embedPlayer).onChange(async (v) => {
-          s.embedPlayer = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Open note after creating")
-      .addToggle((t) =>
-        t.setValue(s.openAfterCreate).onChange(async (v) => {
-          s.openAfterCreate = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    // ---- 高级 ----
-    new Setting(containerEl).setName("Advanced").setHeading();
-
-    new Setting(containerEl)
-      .setName("Server URL")
-      .setDesc(
-        `This is a ${BUILD_CHANNEL} build; the default is ${DEFAULT_BASE_URL}. ` +
-          "Only change this if you were told to (e.g. to test a preview deployment).",
-      )
-      .addText((t) =>
-        t.setPlaceholder(DEFAULT_BASE_URL).setValue(s.baseUrl).onChange(async (v) => {
-          s.baseUrl = v.trim().replace(/\/+$/, "") || DEFAULT_BASE_URL;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Preview bypass secret")
-      .setDesc(
-        "Only for preview servers behind Vercel Deployment Protection. Sent as the " +
-          "x-vercel-protection-bypass header; leave empty for the public site.",
-      )
-      .addText((t) => {
-        t.inputEl.type = "password";
-        t.setValue(s.bypassSecret).onChange(async (v) => {
-          s.bypassSecret = v.trim();
-          await this.plugin.saveSettings();
-        });
-      });
+    return [
+      {
+        type: "group",
+        heading: "Account",
+        items: [
+          {
+            name: "Connected",
+            desc: `Token ${s.token.slice(0, 8)}… · connected ${s.connectedAt ? new Date(s.connectedAt).toLocaleString() : ""}`,
+            visible: connected,
+            render: (setting) => {
+              setting
+                .addButton((b) =>
+                  b.setButtonText("Check").onClick(async () => {
+                    try {
+                      const r = await this.plugin.api().check();
+                      new Notice(r ? `Connected (plan: ${r.plan ?? "free"})` : "Token is no longer valid. Reconnect.");
+                    } catch (e) {
+                      new Notice(`Check failed: ${(e as Error).message}`);
+                    }
+                  }),
+                )
+                .addButton((b) =>
+                  b
+                    .setButtonText("Disconnect")
+                    .setDestructive()
+                    .onClick(async () => {
+                      this.plugin.settings.token = "";
+                      this.plugin.settings.connectedAt = "";
+                      await this.plugin.saveSettings();
+                      new Notice("Disconnected. You can revoke the token on the website under Connect → Obsidian.");
+                      this.update();
+                    }),
+                );
+            },
+          },
+          {
+            name: "Connect to summarizevideototext.com",
+            desc: s.pendingState
+              ? "Waiting for the browser… finish signing in, then Obsidian will receive the token automatically."
+              : "Opens the website in your browser. Sign in (or create a free account), and you'll be sent back here.",
+            visible: () => !connected(),
+            render: (setting) => {
+              setting.addButton((b) =>
+                b
+                  .setButtonText(s.pendingState ? "Open again" : "Connect")
+                  .setCta()
+                  .onClick(() => this.plugin.startConnect()),
+              );
+            },
+          },
+          {
+            name: "Or paste a token",
+            desc: "If the browser can't open Obsidian, copy the token shown on the website and paste it here.",
+            visible: () => !connected(),
+            render: (setting) => {
+              setting.addText((t) =>
+                t.setPlaceholder("svt_…").onChange(async (v) => {
+                  const token = v.trim();
+                  if (!token.startsWith("svt_") || token.length < 20) return;
+                  await this.plugin.acceptToken(token);
+                  this.update();
+                }),
+              );
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Note",
+        items: [
+          {
+            name: "Output language",
+            desc: "Language of the generated summary. Auto picks Chinese or English from Obsidian's language.",
+            control: {
+              type: "dropdown",
+              key: "outputLang",
+              options: Object.fromEntries(OUTPUT_LANGS.map((l) => [l.code, l.name])),
+            },
+          },
+          {
+            name: "Folder",
+            desc: "Where new notes go. Created if missing. Leave empty for the vault root.",
+            control: { type: "text", key: "folder", placeholder: "Video Notes" },
+          },
+          {
+            name: "Include transcript",
+            desc: "Append the timestamped transcript in a collapsed callout.",
+            control: { type: "toggle", key: "includeTranscript" },
+          },
+          {
+            name: "Include summary",
+            desc: "Also generate a template summary (counts as an extra summary on your plan).",
+            control: { type: "toggle", key: "includeSummary" },
+          },
+          {
+            name: "Summary template",
+            visible: () => this.plugin.settings.includeSummary,
+            control: {
+              type: "dropdown",
+              key: "summaryTemplate",
+              options: Object.fromEntries(SUMMARY_TEMPLATES.map((t) => [t.id, t.name])),
+            },
+          },
+          {
+            name: "Include quiz",
+            desc: "Add multiple-choice questions with collapsed answers.",
+            control: { type: "toggle", key: "includeQuiz" },
+          },
+          {
+            name: "Include Q&A history",
+            desc: "Questions you asked about the video on the website, with the answers.",
+            control: { type: "toggle", key: "includeQa" },
+          },
+          {
+            name: "Embed video player",
+            desc: "YouTube and TikTok: put a player at the top of the note. Timestamp links then jump the player instead of opening the browser.",
+            control: { type: "toggle", key: "embedPlayer" },
+          },
+          {
+            name: "Open note after creating",
+            control: { type: "toggle", key: "openAfterCreate" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Advanced",
+        items: [
+          {
+            name: "Server URL",
+            desc:
+              `This is a ${BUILD_CHANNEL} build; the default is ${DEFAULT_BASE_URL}. ` +
+              "Only change this if you were told to (e.g. to test a preview deployment).",
+            control: { type: "text", key: "baseUrl", placeholder: DEFAULT_BASE_URL },
+          },
+          {
+            name: "Preview bypass secret",
+            desc:
+              "Only for preview servers behind Vercel Deployment Protection. Sent as the " +
+              "x-vercel-protection-bypass header; leave empty for the public site.",
+            // 密钥要用 password 输入框,声明式控件没有这一种,自己渲染
+            render: (setting) => {
+              setting.addText((t) => {
+                t.inputEl.type = "password";
+                t.setValue(this.plugin.settings.bypassSecret).onChange((v) => void this.setControlValue("bypassSecret", v));
+              });
+            },
+          },
+        ],
+      },
+    ];
   }
 }

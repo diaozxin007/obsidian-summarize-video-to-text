@@ -97,7 +97,7 @@ export function watchUrl(platform: Platform, videoId: string, sourceUrl?: string
   if (platform === "youtube") return `https://www.youtube.com/watch?v=${videoId}`;
   if (platform === "tiktok") {
     const id = videoId.slice(3);
-    const m = sourceUrl ? /^https?:\/\/(?:www\.)?tiktok\.com\/@[\w.\-]+\/video\/\d+/.exec(sourceUrl) : null;
+    const m = sourceUrl ? /^https?:\/\/(?:www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+/.exec(sourceUrl) : null;
     return m ? m[0] : `https://www.tiktok.com/@tiktok/video/${id}`;
   }
   return null;

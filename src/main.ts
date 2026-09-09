@@ -22,7 +22,7 @@
 
 import { MarkdownView, moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu, type WorkspaceLeaf } from "obsidian";
 import { ApiError, SvtApi } from "./api";
-import { BUILD_CHANNEL, VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
+import { VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, urlAtColumn, UrlModal, type RunOptions } from "./modal";
 import { mergeNote, safeFileName, summaryOf, videoIdOf } from "./file";
 import { editorClickExtension, handleDocumentClick, renderVideoBlock } from "./player";
@@ -40,7 +40,6 @@ export default class SvtPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    if (BUILD_CHANNEL === "debug") console.info(`[summarize-video] debug build → ${this.settings.baseUrl}`);
 
     this.settingTab = new SvtSettingTab(this.app, this);
     this.addSettingTab(this.settingTab);
@@ -205,7 +204,7 @@ export default class SvtPlugin extends Plugin {
         `&${VERCEL_BYPASS_COOKIE_FLAG}=true`;
     }
     window.open(url);
-    this.settingTab?.display();
+    this.settingTab?.update();
   }
 
   private async handleConnectCallback(token: string, state: string): Promise<void> {
@@ -219,7 +218,7 @@ export default class SvtPlugin extends Plugin {
       return;
     }
     await this.acceptToken(token);
-    this.settingTab?.display();
+    this.settingTab?.update();
   }
 
   /** 协议回调与手动粘贴共用:存 token、清 state、验一下 */
