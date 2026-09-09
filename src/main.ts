@@ -307,9 +307,14 @@ export default class SvtPlugin extends Plugin {
         embedPlayer: this.settings.embedPlayer,
         summary: template ? { template, length } : summaryText ? { template: "", text: summaryText } : undefined,
       });
-      const merged = mergeNote(existing, note.markdown, note.ownedKeys);
+      // vault.process 在回调里拿到的是落盘前最新内容,合并和写回是一步,不会盖掉
+      // 用户在请求期间的改动(社区审核也要求用它替代 read + modify,2026-09-09)
+      let merged: string | null = null;
+      await this.app.vault.process(file, (current) => {
+        merged = mergeNote(current, note.markdown, note.ownedKeys);
+        return merged ?? current;
+      });
       if (!merged) throw new Error("Could not find the %% svt:start %% / %% svt:end %% markers in this note.");
-      await this.app.vault.modify(file, merged);
       notice.hide();
       new Notice("Summarize Video: note refreshed.");
       // 编辑器里打开着的话让它重读

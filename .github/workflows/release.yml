@@ -1,0 +1,38 @@
+# 打 tag 自动出 GitHub Release(草稿)并附上社区插件要求的三个文件(2026-09-09)。
+# tag 必须和 manifest.json 的 version 完全一致(不带 v 前缀),这是 Obsidian 社区
+# 插件的硬性要求;版本号用 `npm version x.y.z` 改,会同步 manifest/versions.json。
+# 出的是草稿:检查附件无误后在 GitHub 上手动 Publish。
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Check tag matches manifest version
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="$(node -p "require('./manifest.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "tag $tag != manifest version $version"; exit 1
+          fi
+      - name: Create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          gh release create "$tag" --title "$tag" --draft main.js manifest.json styles.css

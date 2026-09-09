@@ -49,7 +49,7 @@ export class UrlModal extends Modal {
       .setDesc("YouTube, TikTok or Instagram link")
       .addText((t) => {
         inputEl = t.inputEl;
-        t.inputEl.style.width = "100%";
+        t.inputEl.addClass("svt-url-input"); // 宽度在 styles.css,社区审核不让写行内 style
         t.setPlaceholder("https://www.youtube.com/watch?v=…")
           .setValue(this.value)
           .onChange((v) => (this.value = v));
