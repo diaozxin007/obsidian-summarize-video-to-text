@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write      # attest-build-provenance 用 OIDC 签名
+  attestations: write  # 把 attestation 写进仓库
 
 jobs:
   build:
@@ -30,6 +32,15 @@ jobs:
           if [ "$tag" != "$version" ]; then
             echo "tag $tag != manifest version $version"; exit 1
           fi
+      # 给发布附件生成 provenance attestation(社区审核建议),用户可用
+      # `gh attestation verify main.js --owner diaozxin007` 核实文件出自本仓库的 CI。
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
       - name: Create draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
