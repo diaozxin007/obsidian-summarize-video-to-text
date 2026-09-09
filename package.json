@@ -1,6 +1,6 @@
 {
   "name": "obsidian-summarize-video-to-text",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Turn a YouTube / TikTok / Instagram video into a structured Obsidian note with summarizevideototext.com",
   "private": true,
   "main": "main.js",
