@@ -26,24 +26,31 @@
   width: 100%;
 }
 
-/* 视频对话侧栏(2026-09-09):全部走 Obsidian 主题变量,深浅色都跟随 */
-.svt-chat {
+/* 视频对话侧栏(2026-09-09):全部走 Obsidian 主题变量,深浅色都跟随。
+   尺寸按用户给的参考图量出来的(2x 截图换算成 CSS px):输入卡片离面板边 12px、离底 4px、
+   圆角 5px、内边距 10/12;提问气泡圆角 8px、内边距 10/15;回答下方图标中心间距 36px。 */
+/* Obsidian 给 .view-content 默认 12px 12px 32px 内边距,这里要自己排版,归零(选择器和它同级、后加载生效) */
+.workspace-leaf-content[data-type="svt-chat"] .view-content.svt-chat {
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 0;
 }
+/* 桌面端状态栏 fixed 浮在右侧栏底部(高 27px、z 15),会盖住输入卡片的底边和脚注;
+   对话栏挂在右侧栏时给底部留出这段空间(4px 外边距 + 27px = 卡片底边贴着状态栏顶) */
+.workspace-split.mod-right-split .workspace-leaf-content[data-type="svt-chat"] .view-content.svt-chat {
+  padding-bottom: 27px;
+}
 .svt-chat-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 8px 8px 0 12px;
   flex: 0 0 auto;
 }
 .svt-chat-title {
   flex: 1 1 auto;
-  font-weight: 600;
+  color: var(--text-muted);
   font-size: var(--font-ui-small);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -52,97 +59,127 @@
 .svt-chat-msgs {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding: 4px 12px 0;
+  font-size: var(--font-ui-medium);
+  line-height: 1.6;
 }
 .svt-chat-empty {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
-  text-align: center;
+  line-height: 1.5;
   margin: auto 0;
-  padding: 24px 8px;
+  padding: 32px 4px;
 }
-.svt-chat-msg {
-  display: flex;
-  flex-direction: column;
-  max-width: 100%;
-}
-.svt-chat-q {
-  align-items: flex-end;
-}
-.svt-chat-a {
-  align-items: flex-start;
-}
-.svt-chat-bubble {
-  max-width: 92%;
-  padding: 8px 12px;
-  border-radius: var(--radius-m, 8px);
+/* 「Back to …」:普通链接,长标题可折行 */
+.svt-chat-link {
+  display: block;
+  margin-top: 10px;
   font-size: var(--font-ui-small);
   line-height: 1.5;
+  cursor: pointer;
   word-break: break-word;
-  white-space: pre-wrap;
 }
-.svt-chat-q .svt-chat-bubble {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-  border-bottom-right-radius: 3px;
-}
-.svt-chat-a .svt-chat-bubble {
-  /* 侧栏底色就是 background-secondary,答案气泡用 primary 加描边才分得出来 */
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
+/* 提问:一块灰色气泡(参考图里是 35% 的字色混进底色,深浅主题都成立),正文字重 */
+.svt-chat-q {
+  margin: 8px 0 20px;
+  padding: 10px 15px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-normal) 35%, var(--background-secondary));
   color: var(--text-normal);
-  border-bottom-left-radius: 3px;
-  white-space: normal;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
-/* 答案是 Markdown 渲染的,首尾段落别再撑间距 */
-.svt-chat-a .svt-chat-bubble > :first-child {
+.svt-chat-q + .svt-chat-q,
+.svt-chat-tools + .svt-chat-q {
+  margin-top: 20px;
+}
+/* 回答:直接是渲染好的 Markdown,不加底、不加框 */
+.svt-chat-a {
+  color: var(--text-normal);
+  word-break: break-word;
+}
+.svt-chat-a > :first-child {
   margin-top: 0;
 }
-.svt-chat-a .svt-chat-bubble > :last-child {
+.svt-chat-a > :last-child {
   margin-bottom: 0;
 }
-.svt-chat-a .svt-chat-bubble p {
-  margin: 0.4em 0;
+.svt-chat-a p {
+  margin: 0.5em 0;
 }
 .svt-chat-thinking {
   color: var(--text-muted);
   font-style: italic;
 }
+/* 回答下面一排靠右的小图标:16px 图标、中心间距 36px、右缘比输入卡片边框缩进 6px */
 .svt-chat-tools {
   display: flex;
-  gap: 4px;
-  margin-top: 4px;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 0 6px;
 }
 .svt-chat-tool {
-  font-size: var(--font-ui-smaller);
-  padding: 2px 8px;
-  height: auto;
-  box-shadow: none;
-  background: transparent;
-  color: var(--text-muted);
+  padding: 4px 6px;
+  color: var(--text-faint);
+}
+.svt-chat-tool svg {
+  width: 16px;
+  height: 16px;
 }
 .svt-chat-tool:hover {
   color: var(--text-normal);
-  background: var(--background-modifier-hover);
 }
-.svt-chat-form {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 8px 12px 10px;
-  border-top: 1px solid var(--background-modifier-border);
+.svt-chat-tool:disabled {
+  color: var(--text-faint);
+  background: transparent;
+  cursor: default;
+}
+/* 输入卡片:没有 Send 按钮,回车即发;底部一行小字放提示和回答语言 */
+.svt-chat-composer {
   flex: 0 0 auto;
+  margin: 8px 12px 4px;
+  padding: 10px 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.svt-chat-composer:focus-within {
+  border-color: var(--background-modifier-border-focus);
+}
+.svt-chat-composer.is-disabled {
+  opacity: 0.6;
 }
 .svt-chat-input {
-  flex: 1 1 auto;
-  min-height: 36px;
-  max-height: 140px;
-  resize: vertical;
+  width: 100%;
+  /* 随内容长高到上限再内部滚动(Obsidian 的 Chromium 132 支持 field-sizing),不用 JS 改样式 */
+  field-sizing: content;
+  min-height: 94px;
+  max-height: 200px;
+  padding: 0;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--font-ui-medium);
+  line-height: 1.5;
+}
+.svt-chat-input:focus,
+.svt-chat-input:active {
+  border: 0;
+  box-shadow: none;
+}
+.svt-chat-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-faint);
   font-size: var(--font-ui-small);
 }
-.svt-chat-send {
-  flex: 0 0 auto;
+.svt-chat-lang {
+  letter-spacing: 0.04em;
 }
