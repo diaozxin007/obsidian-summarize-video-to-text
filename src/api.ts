@@ -15,6 +15,7 @@ import { requestUrl } from "obsidian";
 import { VERCEL_BYPASS_HEADER } from "./build";
 import { collectSummary, SseError } from "./sse";
 import type { QuizQuestion, TranscriptResult, VideoAnalysis, VideoMeta } from "./types";
+import type { QaMessage } from "./chat";
 
 export class ApiError extends Error {
   constructor(
@@ -47,7 +48,7 @@ export class SvtApi {
 
   private async request<T>(
     path: string,
-    init: { method?: "GET" | "POST"; body?: unknown; accept?: string },
+    init: { method?: "GET" | "POST" | "DELETE"; body?: unknown; accept?: string },
   ): Promise<{ status: number; text: string; json: () => T; requestId?: string }> {
     const url = `${this.opts.baseUrl.replace(/\/+$/, "")}${path}`;
     const headers: Record<string, string> = {
@@ -185,6 +186,39 @@ export class SvtApi {
       title: j.title || input.videoId,
       ownedKeys: Array.isArray(j.ownedKeys) && j.ownedKeys.every((k) => typeof k === "string") ? j.ownedKeys : undefined,
     };
+  }
+
+  // ---------- 视频对话(2026-09-09,chat-view.ts) ----------
+
+  /** 问答:主站回纯文本流,requestUrl 整段收下。summary 是调用方从笔记里抽的上下文。 */
+  async ask(context: string, question: string, outputLang: string): Promise<string> {
+    const r = await this.request<never>("/api/qa", {
+      body: { summary: context, question, lang: this.opts.uiLang, outputLang },
+      accept: "text/plain",
+    });
+    return r.text.trim();
+  }
+
+  /** 对话记录按 (用户, 视频, 界面语言) 存,键和网站问答 tab 一致,两边看到同一份 */
+  async qaHistory(videoId: string): Promise<QaMessage[]> {
+    const r = await this.request<{ messages?: unknown }>(
+      `/api/qa/history?videoId=${encodeURIComponent(videoId)}&lang=${this.opts.uiLang}`,
+      {},
+    );
+    const m = r.json().messages;
+    return Array.isArray(m)
+      ? (m as QaMessage[]).filter((x) => x && (x.role === "q" || x.role === "a") && typeof x.content === "string")
+      : [];
+  }
+
+  async saveQaHistory(videoId: string, messages: QaMessage[]): Promise<void> {
+    await this.request("/api/qa/history", { body: { videoId, lang: this.opts.uiLang, messages } });
+  }
+
+  async clearQaHistory(videoId: string): Promise<void> {
+    await this.request(`/api/qa/history?videoId=${encodeURIComponent(videoId)}&lang=${this.opts.uiLang}`, {
+      method: "DELETE",
+    });
   }
 
   /**

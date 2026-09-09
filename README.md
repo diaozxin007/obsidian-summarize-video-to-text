@@ -4,7 +4,7 @@ Turn a YouTube, TikTok or Instagram video into a structured Obsidian note in one
 
 - **TL;DR** callout and **key insights**
 - **Embedded player** (YouTube and TikTok) at the top of the note; timestamp links seek it in place
-- **Chapters** with timestamped bullet points (outside Obsidian the timestamps are plain YouTube links that jump to the second)
+- **Chapters** with timestamped bullet points (with the player off, a timestamp opens the video's page on summarizevideototext.com at that second)
 - Optional **summary** in one of several templates (bullet, table, chapter digest, …)
 - Optional **quiz** with collapsed answers
 - Optional **transcript** in a collapsed callout
@@ -34,7 +34,10 @@ Free accounts get a daily allowance of summaries; Pro removes the daily cap. See
 - **Select a link in a note → Summarize video link in selection** (no dialog, uses your settings).
 - Or click the video icon in the ribbon.
 - **From the website**: on any video page, *Export → Obsidian* sends the note straight into this plugin (no re-analysis).
+- **Open video chat**: a right-sidebar panel to ask questions about the note you're reading. It uses the note's generated section as context, keeps the conversation per video (same history as the website's Q&A tab), and **Add to note** appends an answer under your own notes.
 - **Refresh video note**: re-fetch the generated part of the current note (new quiz results, Q&A, progress). Everything outside the `%% svt:start %%` / `%% svt:end %%` markers, and any frontmatter keys you added, is kept.
+
+Chat answers use the summary quota of your plan like a question asked on the website.
 
 Notes are created in the folder you choose (default `Video Notes`) and opened automatically.
 

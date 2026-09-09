@@ -112,3 +112,22 @@ describe("linkAtLinePos", () => {
     expect(linkAtLinePos(line, line.indexOf("Hello") + 1)).toBeNull();
   });
 });
+
+describe("parseVideoLink: site watch links (2026-09-09)", () => {
+  it("youtube id with ?t", () => {
+    expect(parseVideoLink("https://summarizevideototext.com/watch/Ilg3gGewQ5U?t=103")).toEqual({
+      platform: "youtube", videoId: "Ilg3gGewQ5U", seconds: 103,
+    });
+    expect(parseVideoLink("https://pre.summarizevideototext.com/zh/watch/Ilg3gGewQ5U?t=4")).toMatchObject({ videoId: "Ilg3gGewQ5U", seconds: 4 });
+  });
+  it("tiktok composite id", () => {
+    expect(parseVideoLink("http://localhost:3021/watch/tt/7300000000000000000?t=12")).toEqual({
+      platform: "tiktok", videoId: "tt-7300000000000000000", seconds: 12,
+    });
+  });
+  it("ig / upload / other paths are not seekable", () => {
+    expect(parseVideoLink("https://summarizevideototext.com/watch/ig/CxYz123?t=3")).toBeNull();
+    expect(parseVideoLink("https://summarizevideototext.com/watch/up/0123abcd-0000-0000-0000-000000000000?t=3")).toBeNull();
+    expect(parseVideoLink("https://summarizevideototext.com/pricing")).toBeNull();
+  });
+});

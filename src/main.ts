@@ -1,7 +1,7 @@
 /**
  * Summarize Video To Text —— Obsidian 插件入口(2026-09-04)。
  *
- * 做的事只有三件:
+ * 做的事:
  *   1. 账号连接:设置页按钮跳主站 /connect/obsidian,主站签发个人令牌后通过
  *      obsidian://svt-connect 回来(registerObsidianProtocolHandler),核对 state 存 token。
  *   2. 命令「Summarize video from URL」:弹窗要链接 → 调主站 analyze(+ 可选
@@ -14,11 +14,13 @@
  *      拉 export(分析已在网站做过,不再计费)。
  *   6. 「Refresh video note」:重新拉 export,只替换标记之间的生成区和我们的
  *      frontmatter 键,用户写在标记外的内容保留(file.ts mergeNote)。
+ *   7. 视频对话侧栏(2026-09-09,chat-view.ts):右侧 ItemView 跟着当前视频笔记,
+ *      上下文从笔记抽,问答和记录都走主站,和网站问答 tab 同一份。
  *
  * 所有 AI 计算都在主站做,插件不存密钥、不调模型;配额和积分也由主站按账号扣。
  */
 
-import { MarkdownView, moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu } from "obsidian";
+import { MarkdownView, moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu, type WorkspaceLeaf } from "obsidian";
 import { ApiError, SvtApi } from "./api";
 import { BUILD_CHANNEL, VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, urlAtColumn, UrlModal, type RunOptions } from "./modal";
@@ -26,6 +28,7 @@ import { mergeNote, safeFileName, summaryOf, videoIdOf } from "./file";
 import { editorClickExtension, handleDocumentClick, renderVideoBlock } from "./player";
 import { platformOf, VIDEO_BLOCK_LANG } from "./video";
 import { DEFAULT_SETTINGS, SvtSettingTab, type SvtSettings } from "./settings";
+import { SvtChatView, VIEW_TYPE_CHAT } from "./chat-view";
 
 const PROTOCOL_ACTION = "svt-connect";
 const IMPORT_ACTION = "svt-import";
@@ -86,6 +89,22 @@ export default class SvtPlugin extends Plugin {
 
     this.addRibbonIcon("video", "Summarize video", () => this.openModal(""));
 
+    // 视频对话侧栏:随当前打开的笔记切换绑定
+    this.registerView(VIEW_TYPE_CHAT, (leaf) => new SvtChatView(leaf, this));
+    this.addCommand({
+      id: "open-video-chat",
+      name: "Open video chat",
+      callback: () => void this.activateChat(),
+    });
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CHAT)) {
+          const view = leaf.view;
+          if (view instanceof SvtChatView) view.bindTo(file);
+        }
+      }),
+    );
+
     // 右键菜单:编辑器里光标下 / 选区里的链接
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor) => {
@@ -105,6 +124,17 @@ export default class SvtPlugin extends Plugin {
     this.registerMarkdownCodeBlockProcessor(VIDEO_BLOCK_LANG, (source, el) => renderVideoBlock(source, el));
     this.registerDomEvent(document, "click", handleDocumentClick, { capture: true });
     this.registerEditorExtension(editorClickExtension());
+  }
+
+  /** 打开(或聚焦)右侧的对话侧栏 */
+  async activateChat(): Promise<void> {
+    let leaf: WorkspaceLeaf | null = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHAT)[0] ?? null;
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false);
+      if (!leaf) return;
+      await leaf.setViewState({ type: VIEW_TYPE_CHAT, active: true });
+    }
+    void this.app.workspace.revealLeaf(leaf);
   }
 
   private addMenuItem(menu: Menu, url: string): void {
@@ -153,7 +183,7 @@ export default class SvtPlugin extends Plugin {
     return moment.locale().toLowerCase().startsWith("zh") ? "zh" : "en";
   }
 
-  private outputLang(override?: string): string {
+  outputLang(override?: string): string {
     return (override ?? this.settings.outputLang) || this.uiLang();
   }
 

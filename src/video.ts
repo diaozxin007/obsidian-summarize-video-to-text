@@ -53,6 +53,18 @@ export function parseVideoLink(href: string): VideoLink | null {
   const host = u.hostname.replace(/^(www|m)\./, "");
   const t = u.searchParams.get("t") ?? u.searchParams.get("start");
 
+  // 主站 watch 页链接(2026-09-09 起笔记里的时间戳都指向主站):/watch/<yt id>?t=NN、
+  // /watch/tt/<id>?t=NN,可带 /zh 前缀;pre.* 与本地 dev 也认。IG / 上传没有可嵌入的
+  // 播放器,返回 null 让链接照常打开主站。
+  if (/(^|\.)summarizevideototext\.com$/.test(host) || host === "localhost" || host === "127.0.0.1") {
+    const m = /^(?:\/zh)?\/watch\/(?:(tt|ig|up)\/)?([\w-]+)\/?$/.exec(u.pathname);
+    if (!m) return null;
+    const seconds = t === null ? null : parseTimeParam(t);
+    if (!m[1] && /^[\w-]{11}$/.test(m[2])) return { platform: "youtube", videoId: m[2], seconds };
+    if (m[1] === "tt" && /^\d{5,25}$/.test(m[2])) return { platform: "tiktok", videoId: `tt-${m[2]}`, seconds };
+    return null;
+  }
+
   if (host === "youtube.com" || host === "youtube-nocookie.com" || host === "youtu.be") {
     let id: string | null = null;
     if (host === "youtu.be") id = /^\/([\w-]{11})/.exec(u.pathname)?.[1] ?? null;
