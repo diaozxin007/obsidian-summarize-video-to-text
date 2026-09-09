@@ -13,6 +13,8 @@ export { extractUrl, urlAtColumn };
 export interface RunOptions {
   outputLang: string;
   summaryTemplate: string;
+  /** 这一篇要不要带字幕全文;默认取设置,弹窗里可临时改(2026-09-09) */
+  includeTranscript: boolean;
 }
 
 export class UrlModal extends Modal {
@@ -74,6 +76,11 @@ export class UrlModal extends Modal {
         for (const t of SUMMARY_TEMPLATES) d.addOption(t.id, t.name);
         d.setValue(this.opts.summaryTemplate).onChange((v) => (this.opts.summaryTemplate = v));
       });
+
+    new Setting(contentEl)
+      .setName("Include transcript")
+      .setDesc("Append the full timestamped transcript (long videos add hundreds of lines).")
+      .addToggle((t) => t.setValue(this.opts.includeTranscript).onChange((v) => (this.opts.includeTranscript = v)));
 
     new Setting(contentEl).addButton((b) =>
       b.setButtonText("Create note").setCta().onClick(() => this.submit()),

@@ -49,6 +49,8 @@ export default class SvtPlugin extends Plugin {
       void this.importFromSite(params.videoId ?? "", params.outputLang ?? "", {
         template: params.template ?? "",
         length: params.length ?? "",
+        // 网站导出菜单的「包含字幕全文」勾选(2026-09-09);没带参数按插件设置
+        transcript: params.transcript === undefined ? undefined : params.transcript !== "0" && params.transcript !== "false",
       });
     });
 
@@ -123,6 +125,7 @@ export default class SvtPlugin extends Plugin {
     return {
       outputLang: this.settings.outputLang,
       summaryTemplate: this.settings.includeSummary ? this.settings.summaryTemplate : "",
+      includeTranscript: this.settings.includeTranscript,
     };
   }
 
@@ -228,7 +231,7 @@ export default class SvtPlugin extends Plugin {
       const note = await api.exportNote({
         videoId,
         outputLang,
-        include: this.include(),
+        include: this.include(o.includeTranscript),
         embedPlayer: this.settings.embedPlayer,
         summary: summary ? { template: o.summaryTemplate, text: summary } : undefined,
       });
@@ -249,7 +252,11 @@ export default class SvtPlugin extends Plugin {
    * 分析已在网站做过;template/length 是用户在网站上看的那份详细总结,服务端按它查缓存
    * (2026-09-08 之前这条路的笔记永远没有摘要段)。
    */
-  private async importFromSite(videoId: string, outputLang: string, summary: { template: string; length: string }): Promise<void> {
+  private async importFromSite(
+    videoId: string,
+    outputLang: string,
+    opts: { template: string; length: string; transcript?: boolean },
+  ): Promise<void> {
     if (!/^([\w-]{11}|tt-\d+|ig-[\w-]+|up-[\w-]+)$/.test(videoId)) {
       new Notice("Summarize Video: ignored an import link with a bad video id.");
       return;
@@ -261,9 +268,9 @@ export default class SvtPlugin extends Plugin {
       const note = await this.api().exportNote({
         videoId,
         outputLang: outputLang || this.outputLang(),
-        include: this.include(),
+        include: this.include(opts.transcript),
         embedPlayer: this.settings.embedPlayer,
-        summary: summary.template ? { template: summary.template, length: summary.length || undefined } : undefined,
+        summary: opts.template ? { template: opts.template, length: opts.length || undefined } : undefined,
       });
       const file = await this.writeNote(safeFileName(note.fileName), note.markdown);
       notice.hide();
@@ -274,7 +281,11 @@ export default class SvtPlugin extends Plugin {
       // 分析缓存过期了就走完整流程(会计费),用规范链接重新分析
       if (e instanceof ApiError && e.status === 404) {
         this.running = false;
-        await this.run(canonicalUrl(videoId, this.settings.baseUrl), { outputLang, summaryTemplate: "" });
+        await this.run(canonicalUrl(videoId, this.settings.baseUrl), {
+          outputLang,
+          summaryTemplate: "",
+          includeTranscript: opts.transcript ?? this.settings.includeTranscript,
+        });
         return;
       }
       this.reportError(e);
@@ -328,9 +339,10 @@ export default class SvtPlugin extends Plugin {
     }
   }
 
-  private include(): { transcript: boolean; quiz: boolean; qa: boolean } {
+  /** transcript 可按次覆盖(弹窗开关 / 网站协议参数),其余跟设置 */
+  private include(transcript?: boolean): { transcript: boolean; quiz: boolean; qa: boolean } {
     return {
-      transcript: this.settings.includeTranscript,
+      transcript: transcript ?? this.settings.includeTranscript,
       quiz: this.settings.includeQuiz,
       qa: this.settings.includeQa,
     };
