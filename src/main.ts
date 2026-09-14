@@ -24,9 +24,11 @@ import { MarkdownView, moment, normalizePath, Notice, Plugin, TFile, type Editor
 import { ApiError, SvtApi } from "./api";
 import { VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, urlAtColumn, UrlModal, type RunOptions } from "./modal";
-import { mergeNote, safeFileName, summaryOf, videoIdOf } from "./file";
+import { frontmatterOf, mergeNote, safeFileName, summaryOf, videoIdOf } from "./file";
+import { buildFlashcardNote, FLASHCARD_SUFFIX, mergeFlashcardNote } from "./flashcards";
 import { editorClickExtension, handleDocumentClick, renderVideoBlock } from "./player";
 import { platformOf, VIDEO_BLOCK_LANG } from "./video";
+import type { QuizQuestion } from "./types";
 import { DEFAULT_SETTINGS, SvtSettingTab, type SvtSettings } from "./settings";
 import { SvtChatView, VIEW_TYPE_CHAT } from "./chat-view";
 
@@ -76,13 +78,37 @@ export default class SvtPlugin extends Plugin {
     this.addCommand({
       id: "refresh-video-note",
       name: "Refresh video note",
-      checkCallback: (checking: boolean) => {
+      // 同 create-flashcards:命令永远留在命令面板里,跑错地方给一句解释,
+      // 而不是让命令凭空消失(用户只会以为插件坏了)。
+      callback: () => {
         const file = this.app.workspace.getActiveFile();
-        if (!file || file.extension !== "md") return false;
-        const cache = this.app.metadataCache.getFileCache(file);
-        if (!cache?.frontmatter?.video_id) return false;
-        if (!checking) void this.refresh(file);
-        return true;
+        if (file && file.extension === "md" && this.videoNote(file)) {
+          void this.refresh(file);
+          return;
+        }
+        new Notice(
+          "Summarize Video: open a video note first — refresh re-fetches the generated part of the note you are reading.",
+          8000,
+        );
+      },
+    });
+
+    this.addCommand({
+      id: "create-flashcards",
+      name: "Create flashcards from video note",
+      // 故意用 callback 而不是 checkCallback:守卫版本在非视频笔记上会让这条命令
+      // 从命令面板里整个消失,用户只会以为功能坏了 —— 命令永远搜得到,跑错地方
+      // 时说清楚「卡片是按当前笔记里的那个视频出的」。
+      callback: () => {
+        const file = this.app.workspace.getActiveFile();
+        if (file && file.extension === "md" && this.videoNote(file)) {
+          void this.makeFlashcards(file);
+          return;
+        }
+        new Notice(
+          "Summarize Video: open a video note first — flashcards are made from the quiz of the video in that note.",
+          8000,
+        );
       },
     });
 
@@ -112,6 +138,28 @@ export default class SvtPlugin extends Plugin {
         if (url) this.addMenuItem(menu, url);
       }),
     );
+    // 笔记菜单(标题栏 ⋯ / 文件列表右键):视频笔记才有这两项。
+    // 命令面板要求用户先知道有这么个命令,这里是能被顺手看见的那个入口。
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu: Menu, file) => {
+        if (!(file instanceof TFile) || file.extension !== "md" || !this.videoNote(file)) return;
+        menu.addItem((item) =>
+          item
+            .setTitle("Refresh video note")
+            .setIcon("refresh-cw")
+            .setSection("action")
+            .onClick(() => void this.refresh(file)),
+        );
+        menu.addItem((item) =>
+          item
+            .setTitle("Create flashcards")
+            .setIcon("layers")
+            .setSection("action")
+            .onClick(() => void this.makeFlashcards(file)),
+        );
+      }),
+    );
+
     // 右键菜单:阅读视图 / 实时预览里渲染出来的外链
     this.registerEvent(
       this.app.workspace.on("url-menu", (menu: Menu, url: string) => {
@@ -136,6 +184,11 @@ export default class SvtPlugin extends Plugin {
     void this.app.workspace.revealLeaf(leaf);
   }
 
+  /** 这篇笔记是不是视频笔记(frontmatter 有 video_id) */
+  private videoNote(file: TFile): boolean {
+    return typeof this.app.metadataCache.getFileCache(file)?.frontmatter?.video_id === "string";
+  }
+
   private addMenuItem(menu: Menu, url: string): void {
     menu.addItem((item) =>
       item
@@ -155,6 +208,7 @@ export default class SvtPlugin extends Plugin {
       outputLang: this.settings.outputLang,
       summaryTemplate: this.settings.includeSummary ? this.settings.summaryTemplate : "",
       includeTranscript: this.settings.includeTranscript,
+      flashcards: this.settings.flashcardsOnCreate,
     };
   }
 
@@ -250,11 +304,13 @@ export default class SvtPlugin extends Plugin {
       const analysis = await api.analyze(url, outputLang);
       const videoId = analysis.videoId;
 
-      // 摘要 / 测验是计费步骤,按需并行跑;单项失败不拖累整篇笔记
+      // 摘要 / 测验是计费步骤,按需并行跑;单项失败不拖累整篇笔记。
+      // 测验在「笔记里带 Quiz 段」和「顺带出卡片」两种情况下都要,拿同一次结果。
       notice.setMessage("Summarize Video: preparing note…");
-      const [summary] = await Promise.all([
+      const wantQuiz = this.settings.includeQuiz || o.flashcards;
+      const [summary, quiz] = await Promise.all([
         o.summaryTemplate ? soft(() => api.summarize(url, outputLang, o.summaryTemplate)) : null,
-        this.settings.includeQuiz ? soft(() => api.quiz(videoId, outputLang, undefined)) : null,
+        wantQuiz ? soft(() => api.quiz(videoId, outputLang, undefined)) : null,
       ]);
 
       const note = await api.exportNote({
@@ -268,6 +324,12 @@ export default class SvtPlugin extends Plugin {
       notice.hide();
       new Notice(`Summarize Video: created ${file.path}`);
       if (this.settings.openAfterCreate) await this.app.workspace.getLeaf(false).openFile(file);
+      // 卡片是附带产物:笔记已经落盘了,这一步失败也只是少一篇卡片笔记
+      if (o.flashcards) {
+        // 视频笔记刚打开,别让卡片笔记把焦点抢走
+        if (quiz?.length) await soft(() => this.writeFlashcards(file, note.markdown, quiz, false));
+        else new Notice("Summarize Video: no quiz for this video, so no flashcards were made.", 6000);
+      }
     } catch (e) {
       notice.hide();
       this.reportError(e);
@@ -305,6 +367,10 @@ export default class SvtPlugin extends Plugin {
       notice.hide();
       new Notice(`Summarize Video: created ${file.path}`);
       await this.app.workspace.getLeaf(false).openFile(file);
+      // 「每篇新笔记都出卡片」对网站导出的这条路同样生效
+      if (this.settings.flashcardsOnCreate) {
+        await soft(() => this.quizFlashcards(file, note.markdown, outputLang || this.outputLang()));
+      }
     } catch (e) {
       notice.hide();
       // 分析缓存过期了就走完整流程(会计费),用规范链接重新分析
@@ -314,6 +380,7 @@ export default class SvtPlugin extends Plugin {
           outputLang,
           summaryTemplate: "",
           includeTranscript: opts.transcript ?? this.settings.includeTranscript,
+          flashcards: this.settings.flashcardsOnCreate,
         });
         return;
       }
@@ -368,6 +435,111 @@ export default class SvtPlugin extends Plugin {
     }
   }
 
+  /**
+   * 测验题 → Spaced Repetition 卡片笔记(2026-09-14)。
+   *
+   * 题目来自主站 /api/quiz:**缓存命中在配额检查之前返回**,所以已经出过题的视频
+   * 再做一次卡片不花配额;没出过题的会真生成一套(测验是 Pro 功能,免费账号这里
+   * 会收到 403 pro_required,reportError 直接把主站的文案显示出来)。
+   *
+   * 卡片写进独立的一张笔记,重复执行只追加新题 —— 见 flashcards.ts 顶部。
+   */
+  private async makeFlashcards(file: TFile): Promise<void> {
+    if (!this.guard()) return;
+    this.running = true;
+    const notice = new Notice("Summarize Video: collecting quiz questions…", 0);
+    try {
+      const markdown = await this.app.vault.read(file);
+      const videoId = videoIdOf(markdown);
+      if (!videoId) throw new Error("This note has no video_id in its frontmatter.");
+      const lang = frontmatterOf(markdown).lang;
+      const questions = await this.api().quiz(videoId, this.outputLang(lang || undefined));
+      if (!questions.length) {
+        notice.hide();
+        new Notice("Summarize Video: no quiz questions came back for this video.");
+        return;
+      }
+      notice.hide();
+      await this.writeFlashcards(file, markdown, questions);
+    } catch (e) {
+      notice.hide();
+      this.reportError(e);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  /** 拉一次测验题再出卡片(笔记刚建好的那条路);没有题不算错,说一句就行 */
+  private async quizFlashcards(file: TFile, markdown: string, outputLang: string): Promise<void> {
+    const videoId = frontmatterOf(markdown).video_id;
+    if (!videoId) return;
+    const questions = await this.api().quiz(videoId, outputLang);
+    if (questions.length) await this.writeFlashcards(file, markdown, questions, false);
+    else new Notice("Summarize Video: no quiz for this video, so no flashcards were made.", 6000);
+  }
+
+  /**
+   * 卡片笔记的落盘 —— 命令(makeFlashcards)和「新建笔记时顺带出卡片」共用。
+   * frontmatter 从笔记正文解析而不是 metadataCache:刚写完的笔记还没被索引,
+   * 缓存里是空的。
+   */
+  private async writeFlashcards(
+    source: TFile,
+    markdown: string,
+    questions: QuizQuestion[],
+    open = this.settings.openAfterCreate,
+  ): Promise<void> {
+    const fm = frontmatterOf(markdown);
+    const videoId = fm.video_id;
+    if (!videoId) throw new Error("This note has no video_id in its frontmatter.");
+    const title = fm.title?.trim() || source.basename;
+    const fresh = buildFlashcardNote({
+      videoId,
+      title,
+      channel: fm.channel || undefined,
+      noteName: source.basename,
+      sourceUrl: fm.source || undefined,
+      tag: this.settings.flashcardTag || DEFAULT_SETTINGS.flashcardTag,
+      siteUrl: this.settings.baseUrl,
+      questions,
+    });
+
+    const folder = this.settings.flashcardsFolder;
+    const base = `${safeFileName(title).slice(0, 80).trim()} - ${FLASHCARD_SUFFIX}`;
+    const path = normalizePath(folder ? `${folder}/${base}.md` : `${base}.md`);
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    let target: TFile;
+    let added = fresh.cards;
+    let skipped = 0;
+    if (existing instanceof TFile) {
+      // 已有的卡片一行都不动:复习进度(<!--SR:…-->)就长在这些行后面
+      await this.app.vault.process(existing, (current) => {
+        const r = mergeFlashcardNote(current, fresh.markdown);
+        added = r.added;
+        skipped = r.skipped;
+        return r.content;
+      });
+      target = existing;
+    } else {
+      await this.ensureFolder(folder);
+      target = await this.app.vault.create(path, fresh.markdown);
+    }
+
+    const tail = skipped ? ` (${skipped} already there)` : "";
+    if (!added) {
+      new Notice(`Summarize Video: no new cards${tail}`);
+    } else if (existing instanceof TFile) {
+      new Notice(`Summarize Video: ${added} new cards in ${target.path}${tail}`);
+    } else {
+      // 第一次给这个视频出卡片:说一句卡片拿什么复习,不然文件躺在那儿没人知道下一步
+      new Notice(
+        `Summarize Video: ${added} cards in ${target.path} — review them with the Spaced Repetition plugin.`,
+        8000,
+      );
+    }
+    if (open) await this.app.workspace.getLeaf(false).openFile(target);
+  }
+
   /** transcript 可按次覆盖(弹窗开关 / 网站协议参数),其余跟设置 */
   private include(transcript?: boolean): { transcript: boolean; quiz: boolean; qa: boolean } {
     return {
@@ -390,11 +562,15 @@ export default class SvtPlugin extends Plugin {
     return true;
   }
 
-  private async writeNote(baseName: string, content: string): Promise<TFile> {
-    const folder = this.settings.folder;
+  private async ensureFolder(folder: string): Promise<void> {
     if (folder && !this.app.vault.getAbstractFileByPath(normalizePath(folder))) {
       await this.app.vault.createFolder(normalizePath(folder));
     }
+  }
+
+  private async writeNote(baseName: string, content: string): Promise<TFile> {
+    const folder = this.settings.folder;
+    await this.ensureFolder(folder);
     // 同名文件不覆盖,后缀递增
     for (let i = 0; i < 100; i++) {
       const name = i === 0 ? baseName : `${baseName} (${i})`;

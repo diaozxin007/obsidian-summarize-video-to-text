@@ -61,6 +61,12 @@ export interface SvtSettings {
   /** YouTube / TikTok 笔记嵌入播放器(svt-video 块);关掉则放缩略图 */
   embedPlayer: boolean;
   openAfterCreate: boolean;
+  /** 新建笔记时顺带出卡片;弹窗里的「Also make flashcards」默认值 */
+  flashcardsOnCreate: boolean;
+  /** 「Create flashcards」写到哪个目录;空 = vault 根目录 */
+  flashcardsFolder: string;
+  /** Spaced Repetition 的 deck 标签;层级标签(#flashcards/videos)会变成子 deck */
+  flashcardTag: string;
   /**
    * Vercel 部署保护的绕过密钥(Protection Bypass for Automation)。只有 debug 包
    * 连 pre 预览站时才需要;请求加 x-vercel-protection-bypass 头,连接页 URL 也带上
@@ -83,6 +89,9 @@ export const DEFAULT_SETTINGS: SvtSettings = {
   includeQa: true,
   embedPlayer: true,
   openAfterCreate: true,
+  flashcardsOnCreate: false,
+  flashcardsFolder: "Flashcards",
+  flashcardTag: "#flashcards",
   bypassSecret: "",
 };
 
@@ -103,7 +112,14 @@ export class SvtSettingTab extends PluginSettingTab {
   override async setControlValue(key: string, value: unknown): Promise<void> {
     const s = this.plugin.settings as unknown as Record<string, unknown>;
     let v = value;
-    if (key === "folder" && typeof v === "string") v = v.trim().replace(/^\/+|\/+$/g, "");
+    if ((key === "folder" || key === "flashcardsFolder") && typeof v === "string") {
+      v = v.trim().replace(/^\/+|\/+$/g, "");
+    }
+    // 标签少了 # 就不是标签,SR 找不到 deck —— 自动补上,空值退回默认
+    if (key === "flashcardTag" && typeof v === "string") {
+      const t = v.trim().replace(/\s+/g, "-");
+      v = t ? (t.startsWith("#") ? t : `#${t}`) : DEFAULT_SETTINGS.flashcardTag;
+    }
     if (key === "baseUrl" && typeof v === "string") v = v.trim().replace(/\/+$/, "") || DEFAULT_BASE_URL;
     if (key === "bypassSecret" && typeof v === "string") v = v.trim();
     s[key] = v;
@@ -238,6 +254,31 @@ export class SvtSettingTab extends PluginSettingTab {
           {
             name: "Open note after creating",
             control: { type: "toggle", key: "openAfterCreate" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Flashcards",
+        items: [
+          {
+            name: "Make flashcards with every new note",
+            desc:
+              "Default for the 'Also make flashcards' toggle in the Summarize video dialog. " +
+              "Each video without a quiz yet needs one generated, which counts against your plan (Pro).",
+            control: { type: "toggle", key: "flashcardsOnCreate" },
+          },
+          {
+            name: "Flashcards folder",
+            desc: "Where 'Create flashcards from video note' puts the card notes. Created if missing.",
+            control: { type: "text", key: "flashcardsFolder", placeholder: "Flashcards" },
+          },
+          {
+            name: "Deck tag",
+            desc:
+              "Tag written at the top of every card note, used by the Spaced Repetition plugin to pick the deck. " +
+              "Use a nested tag such as #flashcards/videos to get a sub-deck.",
+            control: { type: "text", key: "flashcardTag", placeholder: "#flashcards" },
           },
         ],
       },

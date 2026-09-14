@@ -59,6 +59,22 @@ function joinFm(fm: FmEntry[]): string {
   return ["---", ...fm.flatMap((e) => e.lines), "---"].join("\n");
 }
 
+/**
+ * frontmatter 的简单标量取值。用在刚写完、metadataCache 还没索引到的笔记上 ——
+ * 那时 getFileCache().frontmatter 是空的,但文本已经在手里了。
+ * 只认 `key: value` 一行的形式,列表(tags)取不到,这里也用不上。
+ */
+export function frontmatterOf(md: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of split(md).fm ?? []) {
+    const m = /^[A-Za-z0-9_-]+:\s*(.*)$/.exec(e.lines[0]);
+    const raw = m?.[1]?.trim() ?? "";
+    if (!raw) continue;
+    out[e.key] = /^"(.*)"$/.test(raw) ? raw.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\") : raw;
+  }
+  return out;
+}
+
 /** 笔记里的 video_id(frontmatter),没有返回 null */
 export function videoIdOf(md: string): string | null {
   const { fm } = split(md);

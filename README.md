@@ -8,7 +8,7 @@ Turn a YouTube, TikTok or Instagram video into a structured Obsidian note in one
 - **Embedded player** (YouTube and TikTok) at the top of the note; timestamp links seek it in place
 - **Chapters** with timestamped bullet points (with the player off, a timestamp opens the video's page on summarizevideototext.com at that second)
 - Optional **summary** in one of several templates (bullet, table, chapter digest, …)
-- Optional **quiz** with collapsed answers
+- Optional **quiz** with collapsed answers — and one command turns it into **spaced-repetition flashcards**
 - Optional **transcript** in a collapsed callout
 - A link back to the video's page on summarizevideototext.com (player, Q&A, quiz, progress) plus the original source link
 - Frontmatter with title, source, workspace link, channel, language and tags — ready for Dataview
@@ -48,6 +48,11 @@ Free accounts get a daily allowance of summaries; Pro removes the daily cap. See
   ![Video chat panel in the right sidebar next to the note](docs/screenshots/chat.png)
 
 - **Refresh video note**: re-fetch the generated part of the current note (new quiz results, Q&A, progress). Everything outside the `%% svt:start %%` / `%% svt:end %%` markers, and any frontmatter keys you added, is kept.
+- **Create flashcards from video note** (also on the note's right-click menu): turn the video's quiz into a separate note of cards for the [Spaced Repetition](https://github.com/st3v3nmw/obsidian-spaced-repetition) plugin — multi-line format, the correct option and its explanation on the back, and a timestamp link to the moment the question came from. Run it again after new questions appear and only the missing cards are appended: existing cards, their review schedule (`<!--SR:…-->`) and any cards you wrote yourself are never touched.
+  Ticking **Also make flashcards** in the *Summarize video* dialog does the same thing while the note is created, so both notes land in one go.
+  Cards come from the quiz, which is a **Pro** feature: if the video already has one, building the cards costs nothing extra; if it doesn't, a quiz is generated then and counts against your plan. The video note is written first either way.
+
+  ![A card note ready for the Spaced Repetition plugin](docs/screenshots/flashcards.png)
 
 Chat answers use the summary quota of your plan like a question asked on the website.
 
@@ -65,6 +70,9 @@ Notes are created in the folder you choose (default `Video Notes`) and opened au
 | Include Q&A history | Add the questions you asked about the video on the website. |
 | Embed video player | YouTube and TikTok: put a `svt-video` block (rendered as a player) at the top instead of the thumbnail. Clicking a timestamp seeks the player. With the player off, YouTube timestamps open the browser at that second; TikTok links open the video from the start (TikTok has no seek parameter). Instagram and uploads keep the thumbnail. |
 | Open note after creating | Self-explanatory. |
+| Make flashcards with every new note | Default for the *Also make flashcards* toggle in the dialog. A video with no quiz yet gets one generated, which counts against your plan (Pro). |
+| Flashcards folder | Where *Create flashcards from video note* puts the card notes (default `Flashcards`). |
+| Deck tag | Tag written at the top of a card note; the Spaced Repetition plugin uses it as the deck. A nested tag such as `#flashcards/videos` becomes a sub-deck. |
 | Server URL | Advanced. Only change to test a preview deployment. |
 | Preview bypass secret | Advanced. Vercel *Protection Bypass for Automation* secret, only needed for a protected preview server. |
 

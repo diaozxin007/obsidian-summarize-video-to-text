@@ -15,6 +15,8 @@ export interface RunOptions {
   summaryTemplate: string;
   /** 这一篇要不要带字幕全文;默认取设置,弹窗里可临时改(2026-09-09) */
   includeTranscript: boolean;
+  /** 顺带出一篇复习卡片笔记(2026-09-14);需要测验题,没有就现场生成 */
+  flashcards: boolean;
 }
 
 export class UrlModal extends Modal {
@@ -81,6 +83,14 @@ export class UrlModal extends Modal {
       .setName("Include transcript")
       .setDesc("Append the full timestamped transcript (long videos add hundreds of lines).")
       .addToggle((t) => t.setValue(this.opts.includeTranscript).onChange((v) => (this.opts.includeTranscript = v)));
+
+    new Setting(contentEl)
+      .setName("Also make flashcards")
+      .setDesc(
+        "Write a second note of spaced-repetition cards from the video's quiz. " +
+          "Quizzes are a Pro feature; if this video has no quiz yet, one is generated now and counts against your plan.",
+      )
+      .addToggle((t) => t.setValue(this.opts.flashcards).onChange((v) => (this.opts.flashcards = v)));
 
     new Setting(contentEl).addButton((b) =>
       b.setButtonText("Create note").setCta().onClick(() => this.submit()),
