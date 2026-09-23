@@ -4,6 +4,10 @@ Turn a YouTube, TikTok or Instagram video into a structured Obsidian note in one
 
 ![A video note in Obsidian: embedded YouTube player, TL;DR callout and key insights](docs/screenshots/note.png)
 
+**Video walkthrough:** [Obsidian Plugin: Video Notes with TL;DR, Chapters & Flashcards](https://www.youtube.com/watch?v=gLg68gFJ36E)
+
+[![Video walkthrough on YouTube](https://i.ytimg.com/vi/gLg68gFJ36E/hqdefault.jpg)](https://www.youtube.com/watch?v=gLg68gFJ36E)
+
 - **TL;DR** callout and **key insights**
 - **Embedded player** (YouTube and TikTok) at the top of the note; timestamp links seek it in place
 - **Chapters** with timestamped bullet points (with the player off, a timestamp opens the video's page on summarizevideototext.com at that second)
