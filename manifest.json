@@ -1,7 +1,7 @@
 {
   "id": "summarize-video-to-text",
   "name": "Summarize Video To Text",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "minAppVersion": "1.13.0",
   "description": "Turn a YouTube, TikTok or Instagram video into a structured note: TL;DR, key insights, timestamped chapters, optional summary, quiz and transcript. Requires a summarizevideototext.com account.",
   "author": "diaozxin007",
