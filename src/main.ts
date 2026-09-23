@@ -129,6 +129,16 @@ export default class SvtPlugin extends Plugin {
         }
       }),
     );
+    // 新建的笔记在 file-open 时 metadataCache 可能还没索引到,frontmatter 是空的;
+    // 索引完成后再给对话栏一次机会,否则会一直显示「不是视频笔记」(见 refreshIfStale)
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file) => {
+        for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CHAT)) {
+          const view = leaf.view;
+          if (view instanceof SvtChatView) view.refreshIfStale(file);
+        }
+      }),
+    );
 
     // 右键菜单:编辑器里光标下 / 选区里的链接
     this.registerEvent(

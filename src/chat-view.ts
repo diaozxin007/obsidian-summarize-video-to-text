@@ -132,6 +132,26 @@ export class SvtChatView extends ItemView {
     if (!this.messages.length) void this.loadHistory();
   }
 
+  /**
+   * metadataCache 把某篇笔记索引完 / frontmatter 改了之后调用(main.ts 的 "changed" 监听)。
+   *
+   * 为什么需要:插件刚写完新笔记就打开它,file-open 触发 bindTo 时 metadataCache 往往还没
+   * 索引到这篇,frontmatter 读出来是空的 → 被判成「不是视频笔记」进 detached;而之后的
+   * bindTo 对同一篇 detached 笔记直接 return,于是一直卡在「isn't a video note」,
+   * 直到用户切走再切回来。对话栏开着时新建视频笔记会偶发,Obsidian 刚启动、索引还没热起来时最容易撞上。
+   *
+   * 只在绑定结论真的会变时才重绑(detached 的这篇现在有 video_id 了 / 已绑定这篇但
+   * video_id 变了或没了)—— "changed" 在用户每次编辑后都会触发,无条件重绑会让对话栏
+   * 跟着打字反复重绘。
+   */
+  refreshIfStale(file: TFile): void {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const videoId = typeof fm?.video_id === "string" ? fm.video_id : "";
+    const detachedNowVideo = this.detached?.path === file.path && videoId !== "";
+    const boundChanged = !this.detached && this.bound?.file.path === file.path && this.bound.videoId !== videoId;
+    if (detachedNowVideo || boundChanged) this.bindTo(file);
+  }
+
   /** 对话栏所在的侧栏(左右都算);被拖进主区域就返回 null,不做自动开合 */
   private dock(): WorkspaceSidedock | WorkspaceMobileDrawer | null {
     const root = this.leaf.getRoot();
