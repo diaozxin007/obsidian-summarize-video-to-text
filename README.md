@@ -84,9 +84,12 @@ Notes are created in the folder you choose (default `Video Notes`) and opened au
 
 - The plugin talks only to the server URL in settings (default `https://summarizevideototext.com`).
 - It sends the video link, your chosen language and your account token. Video content is fetched and processed server-side.
+- **Clipboard access.** When you open the video URL dialog without a selected link, the plugin reads the clipboard once to pre-fill the first HTTP(S) link it finds. It does not monitor the clipboard in the background or submit the clipboard text automatically; processing starts only after you click **Create note** or press Enter in the URL field. Clicking **Copy** on a chat answer writes that answer to the clipboard. Clipboard access may appear as a disclosure in the community scorecard.
 - Your token is stored in this vault's `.obsidian/plugins/summarize-video-to-text/data.json`. If you sync or share the vault, treat that file as a secret; you can revoke tokens any time at **summarizevideototext.com/connect/obsidian**.
 
 ## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for issue reporting and contribution guidelines.
 
 ```bash
 npm install

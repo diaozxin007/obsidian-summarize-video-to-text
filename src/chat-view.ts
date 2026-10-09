@@ -20,7 +20,6 @@ import {
   type WorkspaceMobileDrawer,
   type WorkspaceSidedock,
 } from "obsidian";
-import { ApiError } from "./api";
 import { showErrorNotice } from "./error-notice";
 import { chatContextFromNote, formatQaForNote, type QaMessage } from "./chat";
 import type SvtPlugin from "./main";
