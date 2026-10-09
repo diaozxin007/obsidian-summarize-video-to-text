@@ -72,7 +72,7 @@ export class UrlModal extends Modal {
 
     new Setting(contentEl)
       .setName("Summary")
-      .setDesc("Extra template summary below the chapters (counts as another summary on your plan).")
+      .setDesc("Use the summary included with video processing. Custom templates are currently unavailable.")
       .addDropdown((d) => {
         d.addOption("", "None");
         for (const t of SUMMARY_TEMPLATES) d.addOption(t.id, t.name);

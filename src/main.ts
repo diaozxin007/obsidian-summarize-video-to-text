@@ -22,6 +22,7 @@
 
 import { MarkdownView, moment, normalizePath, Notice, Plugin, TFile, type Editor, type Menu, type WorkspaceLeaf } from "obsidian";
 import { ApiError, SvtApi } from "./api";
+import { showErrorNotice } from "./error-notice";
 import { VERCEL_BYPASS_COOKIE_FLAG, VERCEL_BYPASS_HEADER } from "./build";
 import { extractUrl, urlAtColumn, UrlModal, type RunOptions } from "./modal";
 import { frontmatterOf, mergeNote, safeFileName, summaryOf, videoIdOf } from "./file";
@@ -226,6 +227,8 @@ export default class SvtPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<SvtSettings>);
+    // Retain the summary preference while retiring templates not included in credits.
+    this.settings.summaryTemplate = "bullet_summary";
   }
 
   async saveSettings(): Promise<void> {
@@ -310,11 +313,12 @@ export default class SvtPlugin extends Plugin {
     const notice = new Notice("Summarize Video: analyzing…", 0);
     try {
       const api = this.api();
-      const outputLang = this.outputLang(o.outputLang);
-      const analysis = await api.analyze(url, outputLang);
+      const requestedLanguage = this.outputLang(o.outputLang);
+      const analysis = await api.analyze(url, requestedLanguage);
+      const outputLang = analysis.outputLang ?? requestedLanguage;
       const videoId = analysis.videoId;
 
-      // 摘要 / 测验是计费步骤,按需并行跑;单项失败不拖累整篇笔记。
+      // 读取内含摘要 / 按需测验；单项失败不拖累整篇笔记。
       // 测验在「笔记里带 Quiz 段」和「顺带出卡片」两种情况下都要,拿同一次结果。
       notice.setMessage("Summarize Video: preparing note…");
       const wantQuiz = this.settings.includeQuiz || o.flashcards;
@@ -593,13 +597,11 @@ export default class SvtPlugin extends Plugin {
   }
 
   private reportError(e: unknown): void {
+    showErrorNotice(e);
     if (e instanceof ApiError) {
-      const tail = e.requestId ? ` (ref ${e.requestId.slice(0, 8)})` : "";
-      new Notice(`Summarize Video: ${e.message}${tail}`, 8000);
       console.error("[summarize-video]", e.status, e.code, e.message, e.requestId);
       return;
     }
-    new Notice(`Summarize Video: ${(e as Error)?.message ?? String(e)}`, 8000);
     console.error("[summarize-video]", e);
   }
 }

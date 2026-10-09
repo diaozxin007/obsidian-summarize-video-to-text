@@ -21,6 +21,7 @@ import {
   type WorkspaceSidedock,
 } from "obsidian";
 import { ApiError } from "./api";
+import { showErrorNotice } from "./error-notice";
 import { chatContextFromNote, formatQaForNote, type QaMessage } from "./chat";
 import type SvtPlugin from "./main";
 
@@ -292,7 +293,7 @@ export class SvtChatView extends ItemView {
     this.busy = true;
     this.render();
     try {
-      const answer = await this.plugin.api().ask(context, q, b.lang);
+      const answer = await this.plugin.api().ask(b.videoId, context, q, b.lang);
       this.messages = [...prior, { role: "q", content: q }, { role: "a", content: answer || "(empty answer)" }];
       this.histories.set(b.videoId, this.messages);
       // 只在成功后落库,和网站一致:失败不用占位文案盖掉上次存好的记录
@@ -300,7 +301,7 @@ export class SvtChatView extends ItemView {
     } catch (e) {
       this.messages = prior;
       this.inputEl.value = q;
-      new Notice(`Summarize Video: ${e instanceof ApiError ? e.message : ((e as Error)?.message ?? String(e))}`, 8000);
+      showErrorNotice(e);
     } finally {
       this.busy = false;
       this.render();

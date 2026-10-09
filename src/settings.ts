@@ -34,13 +34,9 @@ export const OUTPUT_LANGS: Array<{ code: string; name: string }> = [
   { code: "ar", name: "العربية" },
 ];
 
-/** 主站模板 id(src/lib/llm/templates.ts),这里只挑最常用的几个 */
+/** Unified processing includes the default summary; other templates are not priced. */
 export const SUMMARY_TEMPLATES: Array<{ id: string; name: string }> = [
-  { id: "chapter_summary", name: "Chapter summary" },
-  { id: "key_insights", name: "Key insights" },
-  { id: "bullet_summary", name: "Bullet summary" },
-  { id: "table_summary", name: "Table summary" },
-  { id: "chapter_digest", name: "Chapter digest" },
+  { id: "bullet_summary", name: "Included summary" },
 ];
 
 export interface SvtSettings {
@@ -83,7 +79,7 @@ export const DEFAULT_SETTINGS: SvtSettings = {
   outputLang: "",
   folder: "Video Notes",
   includeSummary: false,
-  summaryTemplate: "chapter_summary",
+  summaryTemplate: "bullet_summary",
   includeTranscript: true,
   includeQuiz: false,
   includeQa: true,
@@ -147,7 +143,7 @@ export class SvtSettingTab extends PluginSettingTab {
                   b.setButtonText("Check").onClick(async () => {
                     try {
                       const r = await this.plugin.api().check();
-                      new Notice(r ? `Connected (plan: ${r.plan ?? "free"})` : "Token is no longer valid. Reconnect.");
+                      new Notice(r ? `Connected (plan: ${r.plan ?? "free"}${r.credits ? ` · ${r.credits.available} credits` : ""})` : "Token is no longer valid. Reconnect.");
                     } catch (e) {
                       new Notice(`Check failed: ${(e as Error).message}`);
                     }
@@ -224,7 +220,7 @@ export class SvtSettingTab extends PluginSettingTab {
           },
           {
             name: "Include summary",
-            desc: "Also generate a template summary (counts as an extra summary on your plan).",
+            desc: "Use the summary included with video processing. Custom templates are currently unavailable.",
             control: { type: "toggle", key: "includeSummary" },
           },
           {
